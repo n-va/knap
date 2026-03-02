@@ -14,6 +14,26 @@
 
 set -e
 
+# --- Update mode (called by `knap update`) ---
+
+KNAP_UPDATE_MODE=false
+KNAP_UPDATE_DIR=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --update)
+            KNAP_UPDATE_MODE=true
+            shift
+            ;;
+        --dir)
+            KNAP_UPDATE_DIR="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
 # --- Install gum if missing ---
 
 if ! command -v gum &>/dev/null; then
@@ -444,6 +464,29 @@ EOF
         gum style --faint "  Scaffolded $project"
     done <<< "$SELECTED"
 }
+
+# =============================================================================
+# Update mode: skip interactive flow, just reconfigure
+# =============================================================================
+
+if [ "$KNAP_UPDATE_MODE" = true ]; then
+    INSTALL_DIR="${KNAP_UPDATE_DIR:-$HOME/Knap}"
+    VAULT_NAME=$(basename "$INSTALL_DIR")
+    CLAUDE_DIR="$HOME/.claude"
+    SKILLS_DIR="$CLAUDE_DIR/skills"
+    HOOKS_DIR="$CLAUDE_DIR/hooks"
+    CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+
+    if [ ! -d "$INSTALL_DIR" ]; then
+        echo "Error: vault not found at $INSTALL_DIR"
+        exit 1
+    fi
+
+    configure_knap
+    echo ""
+    gum style --foreground 82 --bold "✓ Knap updated"
+    exit 0
+fi
 
 # =============================================================================
 # Join a team or start fresh
