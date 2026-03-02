@@ -362,7 +362,7 @@ Build a markdown table mapping file path patterns to documentation or context th
 
 Write both files now using the Write tool. Overwrite whatever is there."
 
-    if cd "$project_root" && claude -p \
+    if cd "$project_root" && CLAUDECODE= claude -p \
         --model sonnet \
         --allowedTools "Read Glob Grep Write" \
         --dangerously-skip-permissions \
