@@ -8,66 +8,81 @@
 
 set -e
 
-echo ""
-echo -e "\033[38;5;135m  ██╗  ██╗ ███╗   ██╗  █████╗  ██████╗ \033[0m"
-echo -e "\033[38;5;134m  ██║ ██╔╝ ████╗  ██║ ██╔══██╗ ██╔══██╗\033[0m"
-echo -e "\033[38;5;133m  █████╔╝  ██╔██╗ ██║ ███████║ ██████╔╝\033[0m"
-echo -e "\033[38;5;132m  ██╔═██╗  ██║╚██╗██║ ██╔══██║ ██╔═══╝ \033[0m"
-echo -e "\033[38;5;131m  ██║  ██╗ ██║ ╚████║ ██║  ██║ ██║     \033[0m"
-echo -e "\033[38;5;130m  ╚═╝  ╚═╝ ╚═╝  ╚═══╝ ╚═╝  ╚═╝ ╚═╝     \033[0m"
-echo -e "\033[2m  Shaping knowledge from raw sessions\033[0m"
-echo ""
+# --- Install gum if missing ---
+
+if ! command -v gum &>/dev/null; then
+    if command -v brew &>/dev/null; then
+        echo "Installing gum..."
+        brew install gum 2>/dev/null
+    else
+        echo "Error: gum is required. Install it with: brew install gum"
+        echo "  Or see: https://github.com/charmbracelet/gum#installation"
+        exit 1
+    fi
+fi
+
+# --- Install jq if missing ---
+
+if ! command -v jq &>/dev/null; then
+    if command -v brew &>/dev/null; then
+        echo "Installing jq..."
+        brew install jq 2>/dev/null
+    else
+        echo "Error: jq is required. Install it with: brew install jq"
+        exit 1
+    fi
+fi
 
 # --- Dependency checks ---
 
 check_dep() {
     if ! command -v "$1" &>/dev/null; then
-        echo "Error: $1 is required. Install it first."
+        gum style --foreground 196 "Error: $1 is required. Install it first."
         exit 1
     fi
 }
 
 check_dep git
-check_dep php
+
+# --- Banner ---
+
+echo ""
+gum style --foreground 135 '  ██╗  ██╗ ███╗   ██╗  █████╗  ██████╗ '
+gum style --foreground 134 '  ██║ ██╔╝ ████╗  ██║ ██╔══██╗ ██╔══██╗'
+gum style --foreground 133 '  █████╔╝  ██╔██╗ ██║ ███████║ ██████╔╝'
+gum style --foreground 132 '  ██╔═██╗  ██║╚██╗██║ ██╔══██║ ██╔═══╝ '
+gum style --foreground 131 '  ██║  ██╗ ██║ ╚████║ ██║  ██║ ██║     '
+gum style --foreground 130 '  ╚═╝  ╚═╝ ╚═╝  ╚═══╝ ╚═╝  ╚═╝ ╚═╝     '
+gum style --faint '  Shaping knowledge from raw sessions'
+echo ""
 
 # --- Install location ---
 
 DEFAULT_DIR="$HOME/Knap"
-echo -n "Install location [$DEFAULT_DIR]: "
-read -r INSTALL_DIR
+INSTALL_DIR=$(gum input --placeholder "$DEFAULT_DIR" --prompt "Install location: " --value "$DEFAULT_DIR")
 INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_DIR}"
 
 # --- Existing repo or fresh start ---
 
-echo ""
-echo "Do you have an existing Knap repo to clone?"
-echo "  1) Yes — I have a team repo URL"
-echo "  2) No  — start fresh"
-echo -n "Choice [1/2]: "
-read -r CHOICE
+CHOICE=$(gum choose --header "Do you have an existing Knap repo?" "Join a team — I have a repo URL" "Start fresh")
 
-if [[ "$CHOICE" == "1" ]]; then
-    echo -n "Repo URL: "
-    read -r REPO_URL
+if [[ "$CHOICE" == "Join a team"* ]]; then
+    REPO_URL=$(gum input --placeholder "https://github.com/your-team/knap" --prompt "Repo URL: ")
 
     if [ -z "$REPO_URL" ]; then
-        echo "Error: repo URL is required."
+        gum style --foreground 196 "Error: repo URL is required."
         exit 1
     fi
 
     if [ -d "$INSTALL_DIR" ]; then
-        echo "Directory $INSTALL_DIR already exists."
-        echo -n "Pull latest and re-run setup? [Y/n]: "
-        read -r PULL
-        if [[ "${PULL:-Y}" =~ ^[Yy] ]]; then
+        if gum confirm "Directory $INSTALL_DIR already exists. Pull latest and re-run setup?"; then
             cd "$INSTALL_DIR" && git pull --quiet
         else
             echo "Aborted."
             exit 0
         fi
     else
-        echo "Cloning into $INSTALL_DIR..."
-        git clone --quiet "$REPO_URL" "$INSTALL_DIR"
+        gum spin --spinner dot --title "Cloning into $INSTALL_DIR..." -- git clone --quiet "$REPO_URL" "$INSTALL_DIR"
     fi
 
     cd "$INSTALL_DIR" && ./setup.sh
@@ -77,12 +92,12 @@ fi
 # --- Fresh install ---
 
 if [ -d "$INSTALL_DIR" ]; then
-    echo "Error: $INSTALL_DIR already exists. Remove it or choose a different location."
+    gum style --foreground 196 "Error: $INSTALL_DIR already exists. Remove it or choose a different location."
     exit 1
 fi
 
 echo ""
-echo "Setting up fresh Knap vault at $INSTALL_DIR..."
+gum style --foreground 212 "Setting up fresh Knap vault at $INSTALL_DIR..."
 echo ""
 
 VAULT_NAME=$(basename "$INSTALL_DIR")
@@ -358,39 +373,33 @@ for skill_dir in "$INSTALL_DIR"/skills/*/; do
     skill=$(basename "$skill_dir")
     ln -sf "$skill_dir" "$SKILLS_DIR/$skill"
 done
-echo "Skills symlinked to ~/.claude/skills/"
+gum style --faint "Skills symlinked to ~/.claude/skills/"
 
 # --- Configure Claude Code hooks in settings.json ---
 
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
-if [ -f "$SETTINGS_FILE" ]; then
-    SETTINGS=$(cat "$SETTINGS_FILE")
-else
-    SETTINGS="{}"
+if [ ! -f "$SETTINGS_FILE" ]; then
+    echo '{}' > "$SETTINGS_FILE"
 fi
 
-# Use php to merge hooks into settings (handles JSON properly)
-php -r '
-$settings = json_decode($argv[1], true) ?: [];
-$settings["hooks"]["PostToolUse"] = [
-    ["matcher" => "Bash", "hooks" => [
-        ["type" => "command", "command" => "\$HOME/.claude/hooks/obsidian-post-commit.sh", "timeout" => 10]
-    ]]
-];
-$settings["hooks"]["Stop"] = [
-    ["matcher" => "", "hooks" => [
-        ["type" => "command", "command" => "\$HOME/.claude/hooks/obsidian-sync.sh", "timeout" => 15]
-    ]]
-];
-file_put_contents($argv[2], json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
-' "$SETTINGS" "$SETTINGS_FILE"
-echo "Claude Code hooks configured"
+# Use jq to merge hooks into settings
+jq '.hooks.PostToolUse = [
+    {"matcher": "Bash", "hooks": [
+        {"type": "command", "command": "$HOME/.claude/hooks/obsidian-post-commit.sh", "timeout": 10}
+    ]}
+] | .hooks.Stop = [
+    {"matcher": "", "hooks": [
+        {"type": "command", "command": "$HOME/.claude/hooks/obsidian-sync.sh", "timeout": 15}
+    ]}
+]' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+
+gum style --faint "Claude Code hooks configured"
 
 # --- Add conventions to CLAUDE.md ---
 
 MARKER="# Knap Conventions"
 if [ -f "$CLAUDE_MD" ] && grep -q "$MARKER" "$CLAUDE_MD"; then
-    echo "Knap conventions already in CLAUDE.md (kept existing)"
+    gum style --faint "Knap conventions already in CLAUDE.md (kept existing)"
 else
     cat >> "$CLAUDE_MD" << CONVENTIONS
 
@@ -426,7 +435,7 @@ $MARKER
 - Use conventional commits: \`feat:\`, \`fix:\`, \`chore:\`, \`refactor:\`, \`docs:\`, \`style:\`, \`test:\`, \`perf:\`
 - Do not add \`Co-Authored-By\` lines to commit messages.
 CONVENTIONS
-    echo "Knap conventions added to CLAUDE.md"
+    gum style --faint "Knap conventions added to CLAUDE.md"
 fi
 
 # --- Add cron job ---
@@ -435,7 +444,7 @@ CRON_LINE="*/15 * * * * $HOOKS_DIR/obsidian-cron-sync.sh"
 EXISTING_CRON=$(crontab -l 2>/dev/null || true)
 if ! echo "$EXISTING_CRON" | grep -q "obsidian-cron-sync"; then
     (echo "$EXISTING_CRON"; echo "$CRON_LINE") | crontab -
-    echo "Cron job added (15-min sync)"
+    gum style --faint "Cron job added (15-min sync)"
 fi
 
 # --- Initial commit ---
@@ -446,15 +455,15 @@ git commit -m "chore: initial knap setup" --quiet
 # --- Done ---
 
 echo ""
-echo -e "\033[32m✓ Knap is ready!\033[0m"
+gum style --foreground 82 --bold "✓ Knap is ready!"
 echo ""
-echo "  Vault:  $INSTALL_DIR"
-echo "  Skills: $SKILLS_DIR/ (symlinked)"
-echo "  Config: $CLAUDE_MD"
+gum style "  Vault:  $INSTALL_DIR"
+gum style "  Skills: $SKILLS_DIR/ (symlinked)"
+gum style "  Config: $CLAUDE_MD"
 echo ""
-echo "Next steps:"
-echo "  1. Open $INSTALL_DIR as a vault in Obsidian"
-echo "  2. Enable the CLI: Obsidian > Settings > General > Command line interface"
-echo "  3. Add a remote: cd $INSTALL_DIR && git remote add origin <your-repo-url>"
-echo "  4. Start a Claude Code session — it will read HEART.md automatically"
+gum style --bold "Next steps:"
+gum style "  1. Open $INSTALL_DIR as a vault in Obsidian"
+gum style "  2. Enable the CLI: Obsidian → Settings → General → Command line interface"
+gum style "  3. Add a remote: cd $INSTALL_DIR && git remote add origin <your-repo-url>"
+gum style "  4. Start a Claude Code session — it will read HEART.md automatically"
 echo ""
