@@ -274,9 +274,16 @@ STOPEOF
 
     # --- Symlink CLI ---
 
+    # Download knap CLI into vault if not already present
+    KNAP_CLI="$INSTALL_DIR/knap"
+    if [ ! -f "$KNAP_CLI" ]; then
+        curl -fsSL "https://raw.githubusercontent.com/n-va/knap/main/knap" -o "$KNAP_CLI"
+        chmod +x "$KNAP_CLI"
+    fi
+
     LOCAL_BIN="$HOME/.local/bin"
     mkdir -p "$LOCAL_BIN"
-    ln -sf "$INSTALL_DIR/knap" "$LOCAL_BIN/knap"
+    ln -sf "$KNAP_CLI" "$LOCAL_BIN/knap"
 
     # Ensure ~/.local/bin is on PATH via shell rc
     SHELL_RC="$HOME/.zshrc"
