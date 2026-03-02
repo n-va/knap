@@ -5,6 +5,16 @@
 # Knap uses Obsidian as the storage layer and Claude Code hooks for automation.
 # It gives AI sessions persistent memory, project context, and team conventions
 # without sending data to third-party services.
+#
+# macOS only. Requires Homebrew for dependency installation.
+
+# When piped via curl, save to a temp file and re-exec so stdin is free for
+# interactive prompts (gum, brew, etc.)
+if [ ! -t 0 ]; then
+    TMPSCRIPT=$(mktemp /tmp/knap-install.XXXXXX)
+    cat > "$TMPSCRIPT"
+    exec bash "$TMPSCRIPT"
+fi
 
 set -e
 
@@ -13,7 +23,7 @@ set -e
 if ! command -v gum &>/dev/null; then
     if command -v brew &>/dev/null; then
         echo "Installing gum..."
-        brew install gum 2>/dev/null
+        brew install gum
     else
         echo "Error: gum is required. Install it with: brew install gum"
         echo "  Or see: https://github.com/charmbracelet/gum#installation"
@@ -26,7 +36,7 @@ fi
 if ! command -v jq &>/dev/null; then
     if command -v brew &>/dev/null; then
         echo "Installing jq..."
-        brew install jq 2>/dev/null
+        brew install jq
     else
         echo "Error: jq is required. Install it with: brew install jq"
         exit 1
@@ -254,7 +264,7 @@ CONVENTIONS
 # Join a team or start fresh
 # =============================================================================
 
-CHOICE=$(gum choose --header "Do you have an existing Knap repo?" "Join a team — I have a repo URL" "Start fresh")
+CHOICE=$(gum choose --header "Do you have an existing Knap repo?" "Join a team -- I have a repo URL" "Start fresh")
 
 if [[ "$CHOICE" == "Join a team"* ]]; then
     REPO_URL=$(gum input --placeholder "https://github.com/your-team/knap" --prompt "Repo URL: ")
@@ -290,8 +300,8 @@ if [[ "$CHOICE" == "Join a team"* ]]; then
     echo ""
     gum style --bold "Next steps:"
     gum style "  1. Open $INSTALL_DIR as a vault in Obsidian"
-    gum style "  2. Enable the CLI: Obsidian → Settings → General → Command line interface"
-    gum style "  3. Start a Claude Code session — it will read HEART.md automatically"
+    gum style "  2. Enable the CLI: Obsidian > Settings > General > Command line interface"
+    gum style "  3. Start a Claude Code session -- it will read HEART.md automatically"
     echo ""
     exit 0
 fi
@@ -430,7 +440,7 @@ When the user asks you to do work:
 1. Add the task(s) to \`Todos.md\` before starting
 2. Do the work
 3. Mark the task as done in \`Todos.md\` when complete
-4. Commit the code — the post-commit hook automatically logs the commit message to \`Changelog.md\`
+4. Commit the code -- the post-commit hook automatically logs the commit message to \`Changelog.md\`
 
 Do NOT manually write to \`Changelog.md\`. The changelog is populated automatically from git commits.
 
@@ -470,9 +480,9 @@ obsidian vault=$VAULT_NAME write path="Projects/<ProjectName>/Last Session.md" c
 
 ## Important Notes
 
-- Never delete or overwrite existing content — only append or toggle tasks.
+- Never delete or overwrite existing content -- only append or toggle tasks.
 - Always read before writing when checking for duplicate date headings.
-- Keep changelog entries concise — one line per change.
+- Keep changelog entries concise -- one line per change.
 - Use \`\n\` for newlines in content parameters.
 SKILLEOF
 
@@ -496,7 +506,10 @@ gum style "  Config: $CLAUDE_MD"
 echo ""
 gum style --bold "Next steps:"
 gum style "  1. Open $INSTALL_DIR as a vault in Obsidian"
-gum style "  2. Enable the CLI: Obsidian → Settings → General → Command line interface"
+gum style "  2. Enable the CLI: Obsidian > Settings > General > Command line interface"
 gum style "  3. Add a remote: cd $INSTALL_DIR && git remote add origin <your-repo-url>"
-gum style "  4. Start a Claude Code session — it will read HEART.md automatically"
+gum style "  4. Start a Claude Code session -- it will read HEART.md automatically"
 echo ""
+
+# Clean up temp file if we were piped
+[ -n "$TMPSCRIPT" ] && rm -f "$TMPSCRIPT"

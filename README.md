@@ -34,6 +34,7 @@ The installer gives you two options:
 
 ### Requirements
 
+- **macOS** with [Homebrew](https://brew.sh/)
 - [Obsidian](https://obsidian.md/) 1.12+ with CLI enabled (Settings > General > Command line interface)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - git
