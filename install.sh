@@ -294,6 +294,10 @@ if [[ "$CHOICE" == "Join a team"* ]]; then
 
     configure_knap
 
+    # Open vault in Obsidian
+    ENCODED_PATH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$INSTALL_DIR'))")
+    open "obsidian://open?path=$ENCODED_PATH" 2>/dev/null || true
+
     echo ""
     gum style --foreground 82 --bold "✓ Knap is ready!"
     echo ""
@@ -302,9 +306,8 @@ if [[ "$CHOICE" == "Join a team"* ]]; then
     gum style "  Config: $CLAUDE_MD"
     echo ""
     gum style --bold "Next steps:"
-    gum style "  1. Open $INSTALL_DIR as a vault in Obsidian"
-    gum style "  2. Enable the CLI: Obsidian > Settings > General > Command line interface"
-    gum style "  3. Start a Claude Code session -- it will read HEART.md automatically"
+    gum style "  1. Enable the CLI: Obsidian > Settings > General > Command line interface"
+    gum style "  2. Start a Claude Code session -- it will read HEART.md automatically"
     echo ""
     exit 0
 fi
@@ -500,6 +503,10 @@ git commit -m "chore: initial knap setup" --quiet
 
 # --- Done ---
 
+# Open vault in Obsidian
+ENCODED_PATH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$INSTALL_DIR'))")
+open "obsidian://open?path=$ENCODED_PATH" 2>/dev/null || true
+
 echo ""
 gum style --foreground 82 --bold "✓ Knap is ready!"
 echo ""
@@ -508,8 +515,7 @@ gum style "  Skills: $SKILLS_DIR/ (symlinked)"
 gum style "  Config: $CLAUDE_MD"
 echo ""
 gum style --bold "Next steps:"
-gum style "  1. Open $INSTALL_DIR as a vault in Obsidian"
-gum style "  2. Enable the CLI: Obsidian > Settings > General > Command line interface"
-gum style "  3. Add a remote: cd $INSTALL_DIR && git remote add origin <your-repo-url>"
-gum style "  4. Start a Claude Code session -- it will read HEART.md automatically"
+gum style "  1. Enable the CLI: Obsidian > Settings > General > Command line interface"
+gum style "  2. Add a remote: cd $INSTALL_DIR && git remote add origin <your-repo-url>"
+gum style "  3. Start a Claude Code session -- it will read HEART.md automatically"
 echo ""
