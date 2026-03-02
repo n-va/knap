@@ -382,34 +382,24 @@ scaffold_projects() {
         mkdir -p "$INSTALL_DIR/Projects/$project"
 
         cat > "$INSTALL_DIR/Projects/$project/Changelog.md" << EOF
-# $project Changelog
-
 Timestamped log of changes and updates.
 EOF
 
         cat > "$INSTALL_DIR/Projects/$project/Todos.md" << EOF
-# $project Todos
-
 - [ ] Review project and add initial notes
 EOF
 
         cat > "$INSTALL_DIR/Projects/$project/Notes.md" << EOF
-# $project
-
 ## Overview
 
 (Add project overview here)
 EOF
 
         cat > "$INSTALL_DIR/Projects/$project/Last Session.md" << EOF
-# Last Session
-
 Updated automatically at the end of each Claude Code session.
 EOF
 
         cat > "$INSTALL_DIR/Projects/$project/Context Map.md" << EOF
-# Context Map
-
 When working on files matching these paths, read the linked doc for context.
 
 | Path Pattern | Read |
@@ -502,8 +492,6 @@ git init --quiet
 # --- HEART.md ---
 
 cat > HEART.md << 'HEARTEOF'
-# HEART
-
 What we know. How we work. Updated as we go.
 
 ## Team
@@ -531,9 +519,7 @@ HEARTEOF
 # --- PULSE.md ---
 
 cat > PULSE.md << 'PULSEEOF'
-# PULSE
-
-Raw learnings captured from Claude Code sessions. Review periodically — promote the good stuff to `HEART.md`, delete the rest.
+Raw learnings captured from Claude Code sessions. Review periodically — promote the good stuff to HEART, delete the rest.
 
 ---
 PULSEEOF
