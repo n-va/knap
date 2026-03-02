@@ -132,6 +132,200 @@ cmd_projects() {
     fi
 }
 
+cmd_init() {
+    local cwd="${1:-$(pwd)}"
+
+    # Resolve project name from cwd
+    local SEARCH_DIRS=("$HOME/Sites" "$HOME/Projects" "$HOME/Code" "$HOME/Developer" "$HOME/repos" "$HOME/src" "$HOME/workspace")
+    local project_name=""
+    local project_root=""
+    for base in "${SEARCH_DIRS[@]}"; do
+        if [[ "$cwd" == "$base/"* ]]; then
+            local rel="${cwd#$base/}"
+            local folder="${rel%%/*}"
+            project_name=$(echo "$folder" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
+            project_root="$base/$folder"
+            break
+        fi
+    done
+
+    # Fallback to git root
+    if [ -z "$project_name" ]; then
+        project_root=$(cd "$cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null) || true
+        if [ -z "$project_root" ]; then
+            warn "Could not resolve project from $cwd"
+            exit 1
+        fi
+        project_name=$(basename "$project_root" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
+    fi
+
+    local project_dir="$VAULT_DIR/Projects/$project_name"
+
+    # Scaffold if it doesn't exist yet
+    if [ ! -d "$project_dir" ]; then
+        cmd_project "$project_name"
+    fi
+
+    msg "Initialising $project_name from $project_root..."
+    echo ""
+
+    # --- Notes.md: tech stack & structure ---
+    local notes=""
+    notes+="## Overview\n\n"
+
+    # Detect tech stack
+    local stack=()
+    [ -f "$project_root/composer.json" ] && stack+=("PHP/Composer")
+    [ -f "$project_root/package.json" ] && stack+=("Node/npm")
+    [ -f "$project_root/Gemfile" ] && stack+=("Ruby/Bundler")
+    [ -f "$project_root/go.mod" ] && stack+=("Go")
+    [ -f "$project_root/Cargo.toml" ] && stack+=("Rust/Cargo")
+    [ -f "$project_root/pyproject.toml" ] || [ -f "$project_root/requirements.txt" ] && stack+=("Python")
+    [ -f "$project_root/Package.swift" ] && stack+=("Swift")
+
+    # Detect frameworks
+    if [ -f "$project_root/artisan" ]; then
+        stack+=("Laravel")
+        [ -f "$project_root/please" ] && stack+=("Statamic")
+    fi
+    if [ -f "$project_root/package.json" ]; then
+        grep -q '"next"' "$project_root/package.json" 2>/dev/null && stack+=("Next.js")
+        grep -q '"nuxt"' "$project_root/package.json" 2>/dev/null && stack+=("Nuxt")
+        grep -q '"vue"' "$project_root/package.json" 2>/dev/null && stack+=("Vue")
+        grep -q '"react"' "$project_root/package.json" 2>/dev/null && stack+=("React")
+        grep -q '"svelte"' "$project_root/package.json" 2>/dev/null && stack+=("Svelte")
+        grep -q '"@inertiajs' "$project_root/package.json" 2>/dev/null && stack+=("Inertia")
+        grep -q '"tailwindcss"' "$project_root/package.json" 2>/dev/null && stack+=("Tailwind CSS")
+    fi
+    [ -f "$project_root/wp-config.php" ] || [ -f "$project_root/wp-content" ] && stack+=("WordPress")
+
+    if [ ${#stack[@]} -gt 0 ]; then
+        notes+="**Stack:** $(printf '%s\n' "${stack[@]}" | paste -sd', ' - | sed 's/,/, /g')\n\n"
+    fi
+
+    # Key directories
+    notes+="## Structure\n\n"
+    notes+='```\n'
+    # List top-level dirs (excluding hidden, vendor, node_modules)
+    for entry in "$project_root"/*/; do
+        [ -d "$entry" ] || continue
+        local dirname=$(basename "$entry")
+        case "$dirname" in
+            vendor|node_modules|.git|.idea|.vscode|storage|bootstrap|__pycache__) continue ;;
+        esac
+        notes+="$dirname/\n"
+    done
+    notes+='```\n'
+
+    # Write Notes.md (only if still default placeholder)
+    if grep -q "(Add project overview here)" "$project_dir/Notes.md" 2>/dev/null; then
+        printf '%b' "$notes" > "$project_dir/Notes.md"
+        faint "  ✓ Notes.md — stack & structure detected"
+    else
+        faint "  ⊘ Notes.md — already has content, skipped"
+    fi
+
+    # --- Changelog.md: seed from git log ---
+    if [ -d "$project_root/.git" ]; then
+        local changelog="$project_dir/Changelog.md"
+        if ! grep -q "^## " "$changelog" 2>/dev/null; then
+            local log_content=""
+            log_content+="Timestamped log of changes and updates.\n\n"
+
+            # Group recent commits by date (last 30)
+            local current_date=""
+            while IFS='|' read -r date msg; do
+                [ -z "$date" ] && continue
+                if [ "$date" != "$current_date" ]; then
+                    current_date="$date"
+                    log_content+="\n## $date\n\n"
+                fi
+                log_content+="- $msg\n"
+            done < <(cd "$project_root" && git log --format='%as|%s' -30 2>/dev/null)
+
+            if [ -n "$current_date" ]; then
+                printf '%b' "$log_content" > "$changelog"
+                faint "  ✓ Changelog.md — seeded from git history"
+            fi
+        else
+            faint "  ⊘ Changelog.md — already has entries, skipped"
+        fi
+    fi
+
+    # --- Todos.md: scan for TODO/FIXME comments ---
+    local todo_file="$project_dir/Todos.md"
+    if grep -q "Review project and add initial notes" "$todo_file" 2>/dev/null; then
+        local todos=""
+        local count=0
+
+        # Search for TODO/FIXME in source files (limit to 20)
+        while IFS=: read -r file line content; do
+            [ -z "$content" ] && continue
+            # Skip minified/long lines
+            [ ${#content} -gt 200 ] && continue
+            # Clean up the content
+            local clean=$(echo "$content" | sed -E 's/^[[:space:]]*[\/\*#-]+ *//; s/[[:space:]]*\*\/$//' | head -c 120)
+            local relfile="${file#$project_root/}"
+            todos+="- [ ] $clean (\`$relfile:$line\`)\n"
+            count=$((count + 1))
+            [ $count -ge 20 ] && break
+        done < <(cd "$project_root" && grep -rn 'TODO\|FIXME\|HACK\|XXX' \
+            --include='*.php' --include='*.js' --include='*.ts' --include='*.vue' \
+            --include='*.rb' --include='*.py' --include='*.go' --include='*.rs' \
+            --include='*.swift' --include='*.blade.php' \
+            --exclude-dir=vendor --exclude-dir=node_modules --exclude-dir=.git \
+            --exclude-dir=storage --exclude-dir=bootstrap --exclude-dir=build \
+            --exclude-dir=dist --exclude-dir=public/build --exclude-dir=.next \
+            --exclude='*.min.js' --exclude='*.min.css' --exclude='*.map' \
+            --exclude='*.lock' --exclude='*.chunk.*' 2>/dev/null || true)
+
+        if [ $count -gt 0 ]; then
+            printf '%b' "$todos" > "$todo_file"
+            faint "  ✓ Todos.md — found $count TODO/FIXME comments"
+        else
+            echo "- [ ] Review project and add initial notes" > "$todo_file"
+            faint "  ⊘ Todos.md — no TODOs found in source"
+        fi
+    else
+        faint "  ⊘ Todos.md — already has content, skipped"
+    fi
+
+    # --- Context Map.md: detect docs & integrations ---
+    local context_map="$project_dir/Context Map.md"
+    if ! grep -q '|.*|.*|' "$context_map" 2>/dev/null || \
+       [ "$(grep -c '|.*|.*|' "$context_map" 2>/dev/null)" -le 2 ]; then
+        local map=""
+        map+="When working on files matching these paths, read the linked doc for context.\n\n"
+        map+="| Path Pattern | Read |\n"
+        map+="|-------------|------|\n"
+
+        # Detect docs directory
+        if [ -d "$project_root/docs" ]; then
+            for doc in "$project_root"/docs/*.md; do
+                [ -f "$doc" ] || continue
+                local docname=$(basename "$doc" .md)
+                local slug=$(echo "$docname" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g')
+                map+="| \`docs/$docname.md\` | Related integration docs |\n"
+            done
+        fi
+
+        # Detect CLAUDE.md
+        [ -f "$project_root/CLAUDE.md" ] && map+="| \`CLAUDE.md\` | Project-level AI instructions |\n"
+
+        # Detect README
+        [ -f "$project_root/README.md" ] && map+="| \`README.md\` | Project README |\n"
+
+        printf '%b' "$map" > "$context_map"
+        faint "  ✓ Context Map.md — mapped detected docs"
+    else
+        faint "  ⊘ Context Map.md — already has mappings, skipped"
+    fi
+
+    echo ""
+    success "✓ $project_name initialised"
+    faint "  $project_dir/"
+}
+
 cmd_populate() {
     if ! command -v gum &>/dev/null; then
         warn "gum is required for interactive selection. Install: brew install gum"
@@ -238,6 +432,7 @@ cmd_help() {
     echo ""
     msg "knap — manage the Knap vault"
     echo ""
+    echo "  knap init             Auto-populate project from cwd (stack, git log, TODOs)"
     echo "  knap project <name>   Scaffold a new project"
     echo "  knap populate         Scan local dirs and scaffold new projects"
     echo "  knap projects         List all projects"
@@ -250,6 +445,7 @@ cmd_help() {
 # --- Dispatch ---
 
 case "${1:-}" in
+    init)     cmd_init ;;
     project)  cmd_project "$2" ;;
     populate) cmd_populate ;;
     projects) cmd_projects ;;
