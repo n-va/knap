@@ -253,6 +253,77 @@ CONVENTIONS
 }
 
 # =============================================================================
+# Scaffold projects from ~/Sites
+# =============================================================================
+
+scaffold_projects() {
+    SITES_DIR="$HOME/Sites"
+    if [ ! -d "$SITES_DIR" ]; then return; fi
+
+    # List directories in ~/Sites, excluding hidden dirs
+    PROJECTS=()
+    for dir in "$SITES_DIR"/*/; do
+        [ -d "$dir" ] || continue
+        name=$(basename "$dir")
+        [[ "$name" == .* ]] && continue
+        # Convert to title case for display
+        title=$(echo "$name" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
+        # Skip if project already exists in vault
+        if [ -d "$INSTALL_DIR/Projects/$title" ]; then continue; fi
+        PROJECTS+=("$title")
+    done
+
+    if [ ${#PROJECTS[@]} -eq 0 ]; then return; fi
+
+    echo ""
+    SELECTED=$(printf '%s\n' "${PROJECTS[@]}" | gum choose --no-limit --header "Bootstrap projects from ~/Sites:") || true
+
+    if [ -z "$SELECTED" ]; then return; fi
+
+    while IFS= read -r project; do
+        [ -z "$project" ] && continue
+        mkdir -p "$INSTALL_DIR/Projects/$project"
+
+        cat > "$INSTALL_DIR/Projects/$project/Changelog.md" << EOF
+# $project Changelog
+
+Timestamped log of changes and updates.
+EOF
+
+        cat > "$INSTALL_DIR/Projects/$project/Todos.md" << EOF
+# $project Todos
+
+- [ ] Review project and add initial notes
+EOF
+
+        cat > "$INSTALL_DIR/Projects/$project/Notes.md" << EOF
+# $project
+
+## Overview
+
+(Add project overview here)
+EOF
+
+        cat > "$INSTALL_DIR/Projects/$project/Last Session.md" << EOF
+# Last Session
+
+Updated automatically at the end of each Claude Code session.
+EOF
+
+        cat > "$INSTALL_DIR/Projects/$project/Context Map.md" << EOF
+# Context Map
+
+When working on files matching these paths, read the linked doc for context.
+
+| Path Pattern | Read |
+|-------------|------|
+EOF
+
+        gum style --faint "  Scaffolded $project"
+    done <<< "$SELECTED"
+}
+
+# =============================================================================
 # Join a team or start fresh
 # =============================================================================
 
@@ -293,6 +364,7 @@ if [[ "$CHOICE" == "Join a team"* ]]; then
     echo ""
 
     configure_knap
+    scaffold_projects
 
     # Open vault in Obsidian
     ENCODED_PATH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$INSTALL_DIR'))")
@@ -495,6 +567,7 @@ SKILLEOF
 # --- Run shared setup ---
 
 configure_knap
+scaffold_projects
 
 # --- Initial commit ---
 
