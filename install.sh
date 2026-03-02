@@ -267,13 +267,20 @@ STOPEOF
 
     # --- Symlink CLI ---
 
-    if ln -sf "$INSTALL_DIR/knap" /usr/local/bin/knap 2>/dev/null; then
-        gum style --faint "CLI linked to /usr/local/bin/knap"
-    else
-        gum style --faint "Linking CLI to /usr/local/bin/knap (requires sudo)..."
-        sudo ln -sf "$INSTALL_DIR/knap" /usr/local/bin/knap
-        gum style --faint "CLI linked to /usr/local/bin/knap"
+    LOCAL_BIN="$HOME/.local/bin"
+    mkdir -p "$LOCAL_BIN"
+    ln -sf "$INSTALL_DIR/knap" "$LOCAL_BIN/knap"
+
+    # Ensure ~/.local/bin is on PATH
+    if ! echo "$PATH" | grep -q "$LOCAL_BIN"; then
+        SHELL_RC="$HOME/.zshrc"
+        [ -f "$HOME/.bashrc" ] && [ ! -f "$HOME/.zshrc" ] && SHELL_RC="$HOME/.bashrc"
+        if ! grep -q '.local/bin' "$SHELL_RC" 2>/dev/null; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+            gum style --faint "Added ~/.local/bin to PATH in $(basename "$SHELL_RC")"
+        fi
     fi
+    gum style --faint "CLI linked to ~/.local/bin/knap"
 
     # --- Configure Claude Code hooks in settings.json ---
 
