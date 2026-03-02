@@ -265,6 +265,11 @@ STOPEOF
 
     gum style --faint "Hooks installed to ~/.claude/hooks/"
 
+    # --- Symlink CLI ---
+
+    ln -sf "$INSTALL_DIR/knap" /usr/local/bin/knap
+    gum style --faint "CLI linked to /usr/local/bin/knap"
+
     # --- Configure Claude Code hooks in settings.json ---
 
     SETTINGS_FILE="$CLAUDE_DIR/settings.json"

@@ -1,0 +1,211 @@
+#!/bin/bash
+# Knap CLI — manage the Knap vault from the terminal
+#
+# ◈ Cairn
+
+set -e
+
+# Resolve real path through symlinks to find the vault
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+    LINK_TARGET=$(readlink "$SCRIPT_PATH")
+    if [[ "$LINK_TARGET" == /* ]]; then
+        SCRIPT_PATH="$LINK_TARGET"
+    else
+        SCRIPT_PATH="$(dirname "$SCRIPT_PATH")/$LINK_TARGET"
+    fi
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+
+# The vault is the parent of the repo (install.sh puts the repo at INSTALL_DIR)
+# But the script lives in the repo root, which IS the vault
+VAULT_DIR="$SCRIPT_DIR"
+
+# --- Helpers ---
+
+msg() {
+    if command -v gum &>/dev/null; then
+        gum style --foreground 135 "$1"
+    else
+        echo "$1"
+    fi
+}
+
+faint() {
+    if command -v gum &>/dev/null; then
+        gum style --faint "$1"
+    else
+        echo "$1"
+    fi
+}
+
+success() {
+    if command -v gum &>/dev/null; then
+        gum style --foreground 82 "$1"
+    else
+        echo "$1"
+    fi
+}
+
+warn() {
+    if command -v gum &>/dev/null; then
+        gum style --foreground 214 "$1"
+    else
+        echo "$1"
+    fi
+}
+
+# --- Subcommands ---
+
+cmd_project() {
+    local name="$1"
+    if [ -z "$name" ]; then
+        echo "Usage: knap project <name>"
+        echo ""
+        echo "Scaffold a new project in the vault."
+        echo "Name should be title case, e.g. 'My App'"
+        exit 1
+    fi
+
+    local project_dir="$VAULT_DIR/Projects/$name"
+
+    if [ -d "$project_dir" ]; then
+        warn "Project '$name' already exists at $project_dir"
+        exit 1
+    fi
+
+    mkdir -p "$project_dir"
+
+    cat > "$project_dir/Changelog.md" << 'EOF'
+Timestamped log of changes and updates.
+EOF
+
+    cat > "$project_dir/Todos.md" << 'EOF'
+- [ ] Review project and add initial notes
+EOF
+
+    cat > "$project_dir/Notes.md" << 'EOF'
+## Overview
+
+(Add project overview here)
+EOF
+
+    cat > "$project_dir/Last Session.md" << 'EOF'
+Updated automatically at the end of each Claude Code session.
+EOF
+
+    cat > "$project_dir/Context Map.md" << 'EOF'
+When working on files matching these paths, read the linked doc for context.
+
+| Path Pattern | Read |
+|-------------|------|
+EOF
+
+    success "✓ Scaffolded project: $name"
+    faint "  $project_dir/"
+}
+
+cmd_projects() {
+    local projects_dir="$VAULT_DIR/Projects"
+    if [ ! -d "$projects_dir" ]; then
+        echo "No projects directory found."
+        exit 1
+    fi
+
+    local count=0
+    for dir in "$projects_dir"/*/; do
+        [ -d "$dir" ] || continue
+        local name=$(basename "$dir")
+        local todos=$(grep -c '^\- \[ \]' "$dir/Todos.md" 2>/dev/null || true)
+        local done=$(grep -c '^\- \[x\]' "$dir/Todos.md" 2>/dev/null || true)
+        todos="${todos:-0}"
+        done="${done:-0}"
+        echo "  $name  ($todos open, $done done)"
+        count=$((count + 1))
+    done
+
+    if [ $count -eq 0 ]; then
+        faint "No projects yet. Create one with: knap project <name>"
+    else
+        echo ""
+        faint "$count project(s)"
+    fi
+}
+
+cmd_sync() {
+    if [ ! -d "$VAULT_DIR/.git" ]; then
+        warn "Vault is not a git repository."
+        exit 1
+    fi
+
+    cd "$VAULT_DIR"
+
+    if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+        faint "Nothing to sync — vault is clean."
+        return
+    fi
+
+    git add -A
+    CHANGED=$(git diff --cached --name-only)
+    PARTS=()
+    PROJECTS=$(echo "$CHANGED" | grep '^Projects/' | cut -d/ -f2 | sort -u | xargs 2>/dev/null)
+    echo "$CHANGED" | grep -q '^skills/' && PARTS+=("skills")
+    echo "$CHANGED" | grep -q '^HEART\.md' && PARTS+=("HEART")
+    echo "$CHANGED" | grep -q '^PULSE\.md' && PARTS+=("PULSE")
+    for p in $PROJECTS; do PARTS+=("$p"); done
+    MSG=$(printf '%s\n' "${PARTS[@]}" | awk '!seen[$0]++' | paste -sd',' - | sed 's/,/, /g')
+    if [ -z "$MSG" ]; then MSG="auto-sync $(date +%Y-%m-%d_%H:%M)"; fi
+
+    git commit -m "docs: update ${MSG}" --quiet 2>/dev/null || true
+    git push --quiet 2>/dev/null || true
+    success "✓ Vault synced"
+}
+
+cmd_status() {
+    local projects_dir="$VAULT_DIR/Projects"
+    local count=0
+    if [ -d "$projects_dir" ]; then
+        for dir in "$projects_dir"/*/; do
+            [ -d "$dir" ] || continue
+            count=$((count + 1))
+        done
+    fi
+
+    msg "Knap vault: $VAULT_DIR"
+    echo "  Projects: $count"
+
+    if [ -d "$VAULT_DIR/.git" ]; then
+        cd "$VAULT_DIR"
+        local dirty=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$dirty" -gt 0 ]; then
+            warn "  Uncommitted changes: $dirty file(s)"
+        else
+            faint "  Git: clean"
+        fi
+        local remote=$(git remote get-url origin 2>/dev/null || echo "none")
+        faint "  Remote: $remote"
+    fi
+}
+
+cmd_help() {
+    echo ""
+    msg "knap — manage the Knap vault"
+    echo ""
+    echo "  knap project <name>   Scaffold a new project"
+    echo "  knap projects         List all projects"
+    echo "  knap sync             Commit & push vault changes"
+    echo "  knap status           Show vault info"
+    echo "  knap help             Show this help"
+    echo ""
+}
+
+# --- Dispatch ---
+
+case "${1:-}" in
+    project)  cmd_project "$2" ;;
+    projects) cmd_projects ;;
+    sync)     cmd_sync ;;
+    status)   cmd_status ;;
+    help)     cmd_help ;;
+    *)        cmd_help ;;
+esac
