@@ -286,6 +286,7 @@ STOPEOF
         gum style --faint "Added ~/.local/bin to PATH in $(basename "$SHELL_RC")"
     fi
     gum style --faint "CLI linked to ~/.local/bin/knap"
+    gum style --faint 'If "knap" is not found, run: export PATH="$HOME/.local/bin:$PATH"'
 
     # --- Configure Claude Code hooks in settings.json ---
 
