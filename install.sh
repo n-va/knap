@@ -91,92 +91,173 @@ configure_knap() {
 
     mkdir -p "$HOOKS_DIR"
 
-    # Post-commit hook — logs git commits to project changelog
-    cat > "$HOOKS_DIR/obsidian-post-commit.sh" << 'HOOKEOF'
+    # Session start hook — injects vault context into conversation
+    cat > "$HOOKS_DIR/knap-session-start.sh" << STARTEOF
 #!/bin/bash
-set -e
-export PATH="$PATH:/Applications/Obsidian.app/Contents/MacOS"
+VAULT_DIR="$INSTALL_DIR"
+CWD=\$(echo "\$(cat)" | jq -r '.cwd // empty')
 
-INPUT=$(cat)
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
-CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
-SUCCESS=$(echo "$INPUT" | jq -r '.tool_response.success // empty')
+# Only fire once per session — marker expires after 2 hours
+CWD_HASH=\$(echo "\$CWD" | md5 2>/dev/null || echo "\$CWD" | md5sum 2>/dev/null | cut -d' ' -f1)
+SESSION_MARKER="/tmp/knap-session-\$CWD_HASH"
+if [[ -f "\$SESSION_MARKER" ]]; then
+    AGE=\$(( \$(date +%s) - \$(stat -f%m "\$SESSION_MARKER" 2>/dev/null || stat -c%Y "\$SESSION_MARKER" 2>/dev/null) ))
+    if [[ \$AGE -lt 7200 ]]; then exit 0; fi
+fi
+touch "\$SESSION_MARKER"
 
-if [[ "$TOOL_NAME" != "Bash" ]] || [[ "$SUCCESS" != "true" ]]; then exit 0; fi
-if ! echo "$COMMAND" | grep -qE 'git commit '; then exit 0; fi
+# Resolve project name from cwd
+resolve_project() {
+    local dir="\$1"
+    local SEARCH_DIRS=("\$HOME/Sites" "\$HOME/Projects" "\$HOME/Code" "\$HOME/Developer" "\$HOME/repos" "\$HOME/src" "\$HOME/workspace")
+    for base in "\${SEARCH_DIRS[@]}"; do
+        if [[ "\$dir" == "\$base/"* ]]; then
+            local rel="\${dir#\$base/}"
+            echo "\${rel%%/*}" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g'
+            return
+        fi
+    done
+    local root=\$(cd "\$dir" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)
+    basename "\${root:-\$dir}" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g'
+}
 
-SITES_DIR="$HOME/Sites"
-RESOLVED_DIR="$CWD"
+PROJECT=\$(resolve_project "\$CWD")
+PROJECT_DIR="\$VAULT_DIR/Projects/\$PROJECT"
 
-if [[ "$RESOLVED_DIR" == "$SITES_DIR/"* ]]; then
-    RELATIVE="${RESOLVED_DIR#$SITES_DIR/}"
-    PROJECT_DIR="${RELATIVE%%/*}"
-else
-    GIT_ROOT=$(cd "$CWD" && git rev-parse --show-toplevel 2>/dev/null)
-    PROJECT_DIR=$(basename "${GIT_ROOT:-$CWD}")
+# Only output if project exists in vault
+if [[ ! -d "\$PROJECT_DIR" ]]; then exit 0; fi
+
+echo "---"
+echo "KNAP CONTEXT for \$PROJECT:"
+echo ""
+
+if [[ -f "\$VAULT_DIR/HEART.md" ]]; then
+    echo "## HEART (team conventions)"
+    cat "\$VAULT_DIR/HEART.md"
+    echo ""
 fi
 
-PROJECT_NAME=$(echo "$PROJECT_DIR" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
-HOOKEOF
+if [[ -f "\$PROJECT_DIR/Last Session.md" ]]; then
+    echo "## Last Session"
+    cat "\$PROJECT_DIR/Last Session.md"
+    echo ""
+fi
 
-    # Inject vault name
-    echo "VAULT_NAME=\"$VAULT_NAME\"" >> "$HOOKS_DIR/obsidian-post-commit.sh"
+if [[ -f "\$PROJECT_DIR/Todos.md" ]]; then
+    echo "## Todos"
+    cat "\$PROJECT_DIR/Todos.md"
+    echo ""
+fi
 
-    cat >> "$HOOKS_DIR/obsidian-post-commit.sh" << 'HOOKEOF2'
-CHANGELOG_PATH="Projects/${PROJECT_NAME}/Changelog.md"
+if [[ -f "\$PROJECT_DIR/Context Map.md" ]]; then
+    echo "## Context Map"
+    cat "\$PROJECT_DIR/Context Map.md"
+    echo ""
+fi
 
-if ! obsidian vault="$VAULT_NAME" read path="$CHANGELOG_PATH" &>/dev/null; then exit 0; fi
+echo "---"
+echo "REMINDER: Before finishing this session, update Last Session.md in \$PROJECT_DIR/"
+exit 0
+STARTEOF
+    chmod +x "$HOOKS_DIR/knap-session-start.sh"
 
-COMMIT_MSG=$(cd "$CWD" && git log -1 --pretty=format:"%s" 2>/dev/null)
-if [[ -z "$COMMIT_MSG" ]]; then exit 0; fi
+    # Post-commit hook — logs git commits to project changelog (direct file write)
+    cat > "$HOOKS_DIR/knap-post-commit.sh" << COMMITEOF
+#!/bin/bash
+VAULT_DIR="$INSTALL_DIR"
+INPUT=\$(cat)
+TOOL_NAME=\$(echo "\$INPUT" | jq -r '.tool_name // empty')
+COMMAND=\$(echo "\$INPUT" | jq -r '.tool_input.command // empty')
+CWD=\$(echo "\$INPUT" | jq -r '.cwd // empty')
+SUCCESS=\$(echo "\$INPUT" | jq -r '.tool_response.success // empty')
 
-TODAY=$(date +%Y-%m-%d)
-CURRENT_CONTENT=$(obsidian vault="$VAULT_NAME" read path="$CHANGELOG_PATH" 2>/dev/null)
+if [[ "\$TOOL_NAME" != "Bash" ]] || [[ "\$SUCCESS" != "true" ]]; then exit 0; fi
+if ! echo "\$COMMAND" | grep -qE 'git commit '; then exit 0; fi
 
-if echo "$CURRENT_CONTENT" | grep -q "## $TODAY"; then
-    obsidian vault="$VAULT_NAME" append path="$CHANGELOG_PATH" content="- ${COMMIT_MSG}\n" &>/dev/null
+# Resolve project name
+SEARCH_DIRS=("\$HOME/Sites" "\$HOME/Projects" "\$HOME/Code" "\$HOME/Developer" "\$HOME/repos" "\$HOME/src" "\$HOME/workspace")
+for base in "\${SEARCH_DIRS[@]}"; do
+    if [[ "\$CWD" == "\$base/"* ]]; then
+        PROJECT_DIR="\${CWD#\$base/}"
+        PROJECT_DIR="\${PROJECT_DIR%%/*}"
+        break
+    fi
+done
+if [[ -z "\$PROJECT_DIR" ]]; then
+    GIT_ROOT=\$(cd "\$CWD" && git rev-parse --show-toplevel 2>/dev/null)
+    PROJECT_DIR=\$(basename "\${GIT_ROOT:-\$CWD}")
+fi
+PROJECT_NAME=\$(echo "\$PROJECT_DIR" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
+
+CHANGELOG="\$VAULT_DIR/Projects/\$PROJECT_NAME/Changelog.md"
+if [[ ! -f "\$CHANGELOG" ]]; then exit 0; fi
+
+COMMIT_MSG=\$(cd "\$CWD" && git log -1 --pretty=format:"%s" 2>/dev/null)
+if [[ -z "\$COMMIT_MSG" ]]; then exit 0; fi
+
+TODAY=\$(date +%Y-%m-%d)
+
+if grep -q "## \$TODAY" "\$CHANGELOG"; then
+    echo "- \$COMMIT_MSG" >> "\$CHANGELOG"
 else
-    obsidian vault="$VAULT_NAME" append path="$CHANGELOG_PATH" content="\n## ${TODAY}\n\n- ${COMMIT_MSG}\n" &>/dev/null
+    printf '\n## %s\n\n- %s\n' "\$TODAY" "\$COMMIT_MSG" >> "\$CHANGELOG"
 fi
 exit 0
-HOOKEOF2
-    chmod +x "$HOOKS_DIR/obsidian-post-commit.sh"
+COMMITEOF
+    chmod +x "$HOOKS_DIR/knap-post-commit.sh"
 
-    # Sync hook — auto-commit and push vault changes
-    cat > "$HOOKS_DIR/obsidian-sync.sh" << SYNCEOF
+    # Stop hook — sync vault + remind about handoff
+    cat > "$HOOKS_DIR/knap-stop.sh" << STOPEOF
 #!/bin/bash
-set -e
 VAULT_DIR="$INSTALL_DIR"
+CWD=\$(echo "\$(cat)" | jq -r '.cwd // empty')
+
+# Resolve project name
+SEARCH_DIRS=("\$HOME/Sites" "\$HOME/Projects" "\$HOME/Code" "\$HOME/Developer" "\$HOME/repos" "\$HOME/src" "\$HOME/workspace")
+PROJECT_NAME=""
+for base in "\${SEARCH_DIRS[@]}"; do
+    if [[ "\$CWD" == "\$base/"* ]]; then
+        local_dir="\${CWD#\$base/}"
+        PROJECT_NAME=\$(echo "\${local_dir%%/*}" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
+        break
+    fi
+done
+if [[ -z "\$PROJECT_NAME" ]]; then
+    GIT_ROOT=\$(cd "\$CWD" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)
+    PROJECT_NAME=\$(basename "\${GIT_ROOT:-\$CWD}" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
+fi
+
+LAST_SESSION="\$VAULT_DIR/Projects/\$PROJECT_NAME/Last Session.md"
+
+# Check if Last Session was updated today
+TODAY=\$(date +%Y-%m-%d)
+if [[ -f "\$LAST_SESSION" ]] && ! grep -q "\$TODAY" "\$LAST_SESSION"; then
+    echo "KNAP: Last Session.md was not updated this session. Please write a handoff summary to \$LAST_SESSION before ending."
+fi
+
+# Sync vault
 if [[ ! -d "\$VAULT_DIR/.git" ]]; then exit 0; fi
 cd "\$VAULT_DIR"
 if git diff --quiet && git diff --cached --quiet && [[ -z "\$(git ls-files --others --exclude-standard)" ]]; then exit 0; fi
 git add -A
 CHANGED=\$(git diff --cached --name-only)
 PARTS=()
-PROJECTS=\$(echo "\$CHANGED" | grep '^Projects/' | cut -d/ -f2 | sort -u | xargs)
-ROOT_FILES=\$(echo "\$CHANGED" | grep -v '/' | xargs)
+PROJECTS=\$(echo "\$CHANGED" | grep '^Projects/' | cut -d/ -f2 | sort -u | xargs 2>/dev/null)
 echo "\$CHANGED" | grep -q '^skills/' && PARTS+=("skills")
 echo "\$CHANGED" | grep -q '^HEART\.md' && PARTS+=("HEART")
 echo "\$CHANGED" | grep -q '^PULSE\.md' && PARTS+=("PULSE")
 for p in \$PROJECTS; do PARTS+=("\$p"); done
-for f in \$ROOT_FILES; do
-    case "\$f" in
-        HEART.md|PULSE.md|.*) ;;
-        *) PARTS+=("\$f") ;;
-    esac
-done
 MSG=\$(printf '%s\n' "\${PARTS[@]}" | awk '!seen[\$0]++' | paste -sd', ' - | sed 's/,/, /g')
-if [[ -z "\$MSG" ]]; then MSG="auto-sync \$(date +%Y-%m-%d %H:%M)"; fi
+if [[ -z "\$MSG" ]]; then MSG="auto-sync \$(date +%Y-%m-%d_%H:%M)"; fi
 git commit -m "docs: update \${MSG}" --quiet 2>/dev/null || true
 git push --quiet 2>/dev/null || true
 exit 0
-SYNCEOF
-    chmod +x "$HOOKS_DIR/obsidian-sync.sh"
+STOPEOF
+    chmod +x "$HOOKS_DIR/knap-stop.sh"
 
-    # Cron sync (same script)
-    cp "$HOOKS_DIR/obsidian-sync.sh" "$HOOKS_DIR/obsidian-cron-sync.sh"
-    chmod +x "$HOOKS_DIR/obsidian-cron-sync.sh"
+    # Cron sync (reuses stop hook logic)
+    cp "$HOOKS_DIR/knap-stop.sh" "$HOOKS_DIR/knap-cron-sync.sh"
+    chmod +x "$HOOKS_DIR/knap-cron-sync.sh"
 
     gum style --faint "Hooks installed to ~/.claude/hooks/"
 
@@ -187,13 +268,17 @@ SYNCEOF
         echo '{}' > "$SETTINGS_FILE"
     fi
 
-    jq '.hooks.PostToolUse = [
+    jq '.hooks.UserPromptSubmit = [
+        {"matcher": "", "hooks": [
+            {"type": "command", "command": "$HOME/.claude/hooks/knap-session-start.sh", "timeout": 5}
+        ]}
+    ] | .hooks.PostToolUse = [
         {"matcher": "Bash", "hooks": [
-            {"type": "command", "command": "$HOME/.claude/hooks/obsidian-post-commit.sh", "timeout": 10}
+            {"type": "command", "command": "$HOME/.claude/hooks/knap-post-commit.sh", "timeout": 10}
         ]}
     ] | .hooks.Stop = [
         {"matcher": "", "hooks": [
-            {"type": "command", "command": "$HOME/.claude/hooks/obsidian-sync.sh", "timeout": 15}
+            {"type": "command", "command": "$HOME/.claude/hooks/knap-stop.sh", "timeout": 15}
         ]}
     ]' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
 
@@ -244,9 +329,9 @@ CONVENTIONS
 
     # --- Add cron job ---
 
-    CRON_LINE="*/15 * * * * $HOOKS_DIR/obsidian-cron-sync.sh"
+    CRON_LINE="*/15 * * * * $HOOKS_DIR/knap-cron-sync.sh"
     EXISTING_CRON=$(crontab -l 2>/dev/null || true)
-    if ! echo "$EXISTING_CRON" | grep -q "obsidian-cron-sync"; then
+    if ! echo "$EXISTING_CRON" | grep -q "knap-cron-sync"; then
         (echo "$EXISTING_CRON"; echo "$CRON_LINE") | crontab -
         gum style --faint "Cron job added (15-min sync)"
     fi
