@@ -253,30 +253,42 @@ CONVENTIONS
 }
 
 # =============================================================================
-# Scaffold projects from ~/Sites
+# Scaffold projects from local project directories
 # =============================================================================
 
 scaffold_projects() {
-    SITES_DIR="$HOME/Sites"
-    if [ ! -d "$SITES_DIR" ]; then return; fi
+    # Scan common project directories
+    SEARCH_DIRS=("$HOME/Sites" "$HOME/Projects" "$HOME/Code" "$HOME/Developer" "$HOME/repos" "$HOME/src" "$HOME/workspace")
+    FOUND_DIRS=()
+    for d in "${SEARCH_DIRS[@]}"; do
+        [ -d "$d" ] && FOUND_DIRS+=("$d")
+    done
 
-    # List directories in ~/Sites, excluding hidden dirs
+    if [ ${#FOUND_DIRS[@]} -eq 0 ]; then return; fi
+
+    # Collect projects from all found directories
     PROJECTS=()
-    for dir in "$SITES_DIR"/*/; do
-        [ -d "$dir" ] || continue
-        name=$(basename "$dir")
-        [[ "$name" == .* ]] && continue
-        # Convert to title case for display
-        title=$(echo "$name" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
-        # Skip if project already exists in vault
-        if [ -d "$INSTALL_DIR/Projects/$title" ]; then continue; fi
-        PROJECTS+=("$title")
+    for sites_dir in "${FOUND_DIRS[@]}"; do
+        for dir in "$sites_dir"/*/; do
+            [ -d "$dir" ] || continue
+            name=$(basename "$dir")
+            [[ "$name" == .* ]] && continue
+            # Convert to title case for display
+            title=$(echo "$name" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
+            # Skip if project already exists in vault or is a duplicate
+            if [ -d "$INSTALL_DIR/Projects/$title" ]; then continue; fi
+            # Skip duplicates from multiple directories
+            if printf '%s\n' "${PROJECTS[@]}" | grep -qx "$title"; then continue; fi
+            PROJECTS+=("$title")
+        done
     done
 
     if [ ${#PROJECTS[@]} -eq 0 ]; then return; fi
 
+    DIRS_LABEL=$(printf '%s\n' "${FOUND_DIRS[@]}" | sed "s|$HOME|~|g" | paste -sd', ' - | sed 's/,/, /g')
+
     echo ""
-    SELECTED=$(printf '%s\n' "${PROJECTS[@]}" | gum choose --no-limit --header "Bootstrap projects from ~/Sites:") || true
+    SELECTED=$(printf '%s\n' "${PROJECTS[@]}" | sort | gum choose --no-limit --header "Bootstrap projects found in $DIRS_LABEL:") || true
 
     if [ -z "$SELECTED" ]; then return; fi
 
