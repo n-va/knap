@@ -132,6 +132,53 @@ cmd_projects() {
     fi
 }
 
+cmd_populate() {
+    if ! command -v gum &>/dev/null; then
+        warn "gum is required for interactive selection. Install: brew install gum"
+        exit 1
+    fi
+
+    local SEARCH_DIRS=("$HOME/Sites" "$HOME/Projects" "$HOME/Code" "$HOME/Developer" "$HOME/repos" "$HOME/src" "$HOME/workspace")
+    local FOUND_DIRS=()
+    for d in "${SEARCH_DIRS[@]}"; do
+        [ -d "$d" ] && FOUND_DIRS+=("$d")
+    done
+
+    if [ ${#FOUND_DIRS[@]} -eq 0 ]; then
+        warn "No project directories found."
+        exit 1
+    fi
+
+    local PROJECTS=()
+    for sites_dir in "${FOUND_DIRS[@]}"; do
+        for dir in "$sites_dir"/*/; do
+            [ -d "$dir" ] || continue
+            local name=$(basename "$dir")
+            [[ "$name" == .* ]] && continue
+            local title=$(echo "$name" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
+            [ -d "$VAULT_DIR/Projects/$title" ] && continue
+            printf '%s\n' "${PROJECTS[@]}" | grep -qx "$title" 2>/dev/null && continue
+            PROJECTS+=("$title")
+        done
+    done
+
+    if [ ${#PROJECTS[@]} -eq 0 ]; then
+        faint "All projects already scaffolded."
+        return
+    fi
+
+    local DIRS_LABEL=$(printf '%s\n' "${FOUND_DIRS[@]}" | sed "s|$HOME|~|g" | paste -sd', ' - | sed 's/,/, /g')
+    local SELECTED
+    SELECTED=$(printf '%s\n' "${PROJECTS[@]}" | sort | gum choose --no-limit --header "Scaffold projects from $DIRS_LABEL:") || true
+
+    if [ -z "$SELECTED" ]; then return; fi
+
+    while IFS= read -r project; do
+        [ -z "$project" ] && continue
+        cmd_project "$project"
+    done <<< "$SELECTED"
+}
+
 cmd_sync() {
     if [ ! -d "$VAULT_DIR/.git" ]; then
         warn "Vault is not a git repository."
@@ -192,6 +239,7 @@ cmd_help() {
     msg "knap — manage the Knap vault"
     echo ""
     echo "  knap project <name>   Scaffold a new project"
+    echo "  knap populate         Scan local dirs and scaffold new projects"
     echo "  knap projects         List all projects"
     echo "  knap sync             Commit & push vault changes"
     echo "  knap status           Show vault info"
@@ -203,6 +251,7 @@ cmd_help() {
 
 case "${1:-}" in
     project)  cmd_project "$2" ;;
+    populate) cmd_populate ;;
     projects) cmd_projects ;;
     sync)     cmd_sync ;;
     status)   cmd_status ;;
