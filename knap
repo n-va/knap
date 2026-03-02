@@ -372,21 +372,36 @@ Write both files now using the Write tool. Overwrite whatever is there."
         return
     fi
 
-    faint "  (Running: $claude_bin -p --model sonnet)"
-    echo ""
-
-    if CLAUDECODE= "$claude_bin" -p \
-        --model sonnet \
-        --allowedTools "Read Glob Grep Write" \
-        --dangerously-skip-permissions \
-        "$claude_prompt" 2>&1; then
-        echo ""
-        success "✓ Claude analysis complete"
-        faint "  Review: $project_dir/Notes.md"
-        faint "  Review: $project_dir/Context Map.md"
+    if command -v gum &>/dev/null; then
+        if gum spin --spinner dot --title "Claude is reading the codebase..." --show-output -- \
+            env CLAUDECODE= "$claude_bin" -p \
+            --model sonnet \
+            --allowedTools "Read Glob Grep Write" \
+            --dangerously-skip-permissions \
+            "$claude_prompt" 2>&1; then
+            echo ""
+            success "✓ Claude analysis complete"
+            faint "  Review: $project_dir/Notes.md"
+            faint "  Review: $project_dir/Context Map.md"
+        else
+            echo ""
+            warn "Claude analysis failed — bash-generated files are still in place"
+        fi
     else
-        echo ""
-        warn "Claude analysis failed (exit $?) — bash-generated files are still in place"
+        faint "  (This may take a minute...)"
+        if CLAUDECODE= "$claude_bin" -p \
+            --model sonnet \
+            --allowedTools "Read Glob Grep Write" \
+            --dangerously-skip-permissions \
+            "$claude_prompt" 2>&1; then
+            echo ""
+            success "✓ Claude analysis complete"
+            faint "  Review: $project_dir/Notes.md"
+            faint "  Review: $project_dir/Context Map.md"
+        else
+            echo ""
+            warn "Claude analysis failed — bash-generated files are still in place"
+        fi
     fi
 }
 
