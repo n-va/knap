@@ -395,6 +395,9 @@ echo ""
 gum style --foreground 212 "Setting up fresh Knap vault at $INSTALL_DIR..."
 echo ""
 
+TEAM_NAME=$(gum input --placeholder "My Team" --prompt "Team or project name: ") || true
+TEAM_NAME="${TEAM_NAME:-$VAULT_NAME}"
+
 mkdir -p "$INSTALL_DIR"/{Projects,skills/obsidian-cli}
 cd "$INSTALL_DIR"
 git init --quiet
@@ -437,6 +440,85 @@ Raw learnings captured from Claude Code sessions. Review periodically — promot
 
 ---
 PULSEEOF
+
+# --- README.md ---
+
+if gum confirm "Generate a README for the vault?"; then
+    cat > README.md << READMEEOF
+# $TEAM_NAME
+
+Team knowledge vault powered by [Knap](https://github.com/n-va/knap) — a persistent knowledge layer for AI-assisted development.
+
+## The problem
+
+Every Claude Code session starts from scratch. Claude doesn't know your codebase conventions, what you worked on yesterday, what tasks are in flight, or what your teammate learned about that tricky API last week. You end up re-explaining context, re-discovering gotchas, and losing continuity between sessions.
+
+## What this solves
+
+This vault is the shared brain for our Claude Code sessions. It gives Claude **persistent memory** across sessions, projects, and team members — without sending anything to a third-party service. It's just markdown files, synced via git, browsable in [Obsidian](https://obsidian.md/).
+
+When Claude starts a session, it reads your team's conventions, picks up where the last session left off, loads relevant docs for the files you're working on, and knows what tasks are outstanding. When the session ends, it writes everything back — what was done, what's unfinished, and anything it learned along the way.
+
+## How it works
+
+### Session lifecycle
+
+\`\`\`
+Session Start                         Session End
+    │                                     │
+    ├─ Read HEART.md (team conventions)   ├─ Mark completed tasks in Todos.md
+    ├─ Read Todos.md (open tasks)         ├─ Write Last Session.md (handoff)
+    ├─ Read Last Session.md (continuity)  ├─ Append learnings to PULSE.md
+    ├─ Read Context Map.md (file→docs)    └─ Auto-commit & push vault
+    └─ Start working
+         │
+         ├─ Add tasks to Todos.md before starting
+         ├─ Context-prime from linked docs
+         ├─ Do the work
+         └─ Commit → auto-logs to Changelog.md
+\`\`\`
+
+### What each file does
+
+| File | Purpose |
+|------|---------|
+| **\`HEART.md\`** | Team DNA — how we build, code conventions, stack preferences, lessons learned. Claude reads this first, every session. |
+| **\`PULSE.md\`** | Raw learnings captured during sessions. A scratchpad that feeds into HEART over time. |
+| **\`Projects/<Name>/Todos.md\`** | Active task list. Claude adds tasks before starting work and checks them off when done. |
+| **\`Projects/<Name>/Last Session.md\`** | Handoff summary. What was worked on, what's unfinished, what the next session needs to know. |
+| **\`Projects/<Name>/Changelog.md\`** | Auto-populated from git commits via a post-commit hook. The historical record. |
+| **\`Projects/<Name>/Notes.md\`** | Project overview, architecture decisions, tech stack notes. |
+| **\`Projects/<Name>/Context Map.md\`** | Maps file paths to docs. Touch a Stripe integration file? Claude reads your Stripe docs first. |
+| **\`skills/\`** | Shared Claude Code skills, symlinked to \`~/.claude/skills/\`. Everyone gets the same capabilities. |
+
+### Automation
+
+Three hooks run automatically — no manual intervention needed:
+
+- **Post-commit hook** — after every \`git commit\` in Claude Code, the commit message is logged to the project's \`Changelog.md\`.
+- **Session sync** — when Claude finishes responding, vault changes are committed and pushed.
+- **Cron sync** — every 15 minutes as a safety net, in case a hook didn't fire.
+
+### Why Obsidian?
+
+The vault is designed to be opened in Obsidian, which gives you full-text search, graph view, backlinks, and tags — but it's just markdown. Browse it anywhere.
+
+## Setup
+
+\`\`\`bash
+curl -fsSL https://raw.githubusercontent.com/n-va/knap/main/install.sh -o /tmp/knap-install.sh && bash /tmp/knap-install.sh
+\`\`\`
+
+The installer handles everything — hooks, skills, Claude Code conventions, and cron sync.
+
+### Prerequisites
+
+- macOS with [Homebrew](https://brew.sh/)
+- [Obsidian](https://obsidian.md/) 1.12+ with CLI enabled (Settings > General > Command line interface)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+READMEEOF
+    gum style --faint "README.md created"
+fi
 
 # --- .gitignore ---
 
