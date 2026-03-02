@@ -7,14 +7,7 @@
 # without sending data to third-party services.
 #
 # macOS only. Requires Homebrew for dependency installation.
-
-# When piped via curl, save to a temp file and re-exec so stdin is free for
-# interactive prompts (gum, brew, etc.)
-if [ ! -t 0 ]; then
-    TMPSCRIPT=$(mktemp /tmp/knap-install.XXXXXX)
-    cat > "$TMPSCRIPT"
-    exec bash "$TMPSCRIPT"
-fi
+# Install: bash <(curl -fsSL https://raw.githubusercontent.com/n-va/knap/main/install.sh)
 
 set -e
 
@@ -274,6 +267,11 @@ if [[ "$CHOICE" == "Join a team"* ]]; then
         exit 1
     fi
 
+    # Append .git if missing (common when copying URLs from browser)
+    if [[ "$REPO_URL" != *.git ]]; then
+        REPO_URL="${REPO_URL}.git"
+    fi
+
     if [ -d "$INSTALL_DIR" ]; then
         if gum confirm "Directory $INSTALL_DIR already exists. Pull latest and re-run setup?"; then
             cd "$INSTALL_DIR" && git pull --quiet
@@ -282,7 +280,12 @@ if [[ "$CHOICE" == "Join a team"* ]]; then
             exit 0
         fi
     else
-        gum spin --spinner dot --title "Cloning into $INSTALL_DIR..." -- git clone --quiet "$REPO_URL" "$INSTALL_DIR"
+        gum style --faint "Cloning $REPO_URL..."
+        if ! git clone --quiet "$REPO_URL" "$INSTALL_DIR" 2>&1; then
+            gum style --foreground 196 "Error: failed to clone $REPO_URL"
+            gum style --foreground 196 "Check the URL and your access permissions."
+            exit 1
+        fi
     fi
 
     echo ""
@@ -510,6 +513,3 @@ gum style "  2. Enable the CLI: Obsidian > Settings > General > Command line int
 gum style "  3. Add a remote: cd $INSTALL_DIR && git remote add origin <your-repo-url>"
 gum style "  4. Start a Claude Code session -- it will read HEART.md automatically"
 echo ""
-
-# Clean up temp file if we were piped
-[ -n "$TMPSCRIPT" ] && rm -f "$TMPSCRIPT"
