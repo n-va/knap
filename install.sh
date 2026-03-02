@@ -562,100 +562,102 @@ description: >-
 argument-hint: "[todo <task>] [done] [status] [todos] [bootstrap] [handoff]"
 ---
 
-# Obsidian CLI Project Tracking
+# Project Tracking
 
-Use the Obsidian CLI to maintain project changelogs and todo lists inside the user's Obsidian vault.
+Maintain project knowledge in the Obsidian vault at \`$INSTALL_DIR\`.
 
-## Prerequisites
+Use Claude Code's **Read**, **Edit**, and **Write** tools to work with vault files directly -- no shell commands needed for most operations.
 
-The Obsidian desktop app must be running. The Claude Code Bash tool does not source ~/.zshrc, so always prefix commands with:
-
-\`\`\`bash
-export PATH="\$PATH:/Applications/Obsidian.app/Contents/MacOS"
-\`\`\`
-
-## Vault & Structure
-
-- **Vault:** \`$VAULT_NAME\` (at \`$INSTALL_DIR\`)
-- **Always pass** \`vault=$VAULT_NAME\` as the first parameter to every \`obsidian\` command.
-
-Directory layout inside the vault:
+## Vault Structure
 
 \`\`\`
-Projects/
-  <ProjectName>/
-    Notes.md           # Project overview, tech stack, architecture
-    Changelog.md       # Timestamped log (auto-populated from git commits)
-    Todos.md           # Task list for the project
-    Last Session.md    # What was worked on last session, what's unfinished
-    Context Map.md     # Maps file paths to relevant docs for auto-priming
-    *.md               # Additional docs (integrations, bugs, etc.)
+$INSTALL_DIR/
+  HEART.md                            # Team conventions, read every session
+  PULSE.md                            # Raw learnings inbox
+  Projects/
+    <ProjectName>/
+      Notes.md                        # Project overview, tech stack
+      Changelog.md                    # Auto-populated from git commits
+      Todos.md                        # Task list (you manage this)
+      Last Session.md                 # Session handoff summary
+      Context Map.md                  # File path -> doc mapping
 \`\`\`
 
 ## Determining the Project Name
 
-Derive the project name from the current working directory. If the project is under ~/Sites/, use the first directory after ~/Sites/. Otherwise, use the git root basename. Convert to title case.
-
-## Bootstrapping a New Project
-
-\`\`\`bash
-obsidian vault=$VAULT_NAME create path="Projects/<ProjectName>/Changelog.md" content="# <ProjectName> Changelog\n\nTimestamped log of changes and updates.\n"
-obsidian vault=$VAULT_NAME create path="Projects/<ProjectName>/Todos.md" content="# <ProjectName> Todos\n\n- [ ] Review project and add initial notes\n"
-obsidian vault=$VAULT_NAME create path="Projects/<ProjectName>/Notes.md" content="# <ProjectName>\n\n## Overview\n\n(Add project overview here)\n"
-obsidian vault=$VAULT_NAME create path="Projects/<ProjectName>/Last Session.md" content="# Last Session\n\nUpdated automatically at the end of each Claude Code session.\n"
-obsidian vault=$VAULT_NAME create path="Projects/<ProjectName>/Context Map.md" content="# Context Map\n\nWhen working on files matching these paths, read the linked doc for context.\n\n| Path Pattern | Read |\n|-------------|------|\n"
-\`\`\`
+Derive from the current working directory basename, converted to title case:
+- \`~/Sites/my-cool-app\` -> \`My Cool App\`
+- \`~/Code/dashboard\` -> \`Dashboard\`
 
 ## Task Workflow
 
 When the user asks you to do work:
-1. Add the task(s) to \`Todos.md\` before starting
+1. **Read** \`Todos.md\` and **Edit** to append \`- [ ] <task>\` before starting
 2. Do the work
-3. Mark the task as done in \`Todos.md\` when complete
-4. Commit the code -- the post-commit hook automatically logs the commit message to \`Changelog.md\`
+3. **Edit** \`Todos.md\` to change \`- [ ]\` to \`- [x]\` on the completed task
+4. Commit the code -- the post-commit hook auto-logs to \`Changelog.md\`
 
-Do NOT manually write to \`Changelog.md\`. The changelog is populated automatically from git commits.
+Do NOT manually write to \`Changelog.md\`.
 
 ## Managing Todos
 
-### Adding a Todo
-
-\`\`\`bash
-obsidian vault=$VAULT_NAME append path="Projects/<ProjectName>/Todos.md" content="- [ ] <task description>\n"
-\`\`\`
-
-### Completing a Todo
-
-\`\`\`bash
-obsidian vault=$VAULT_NAME tasks path="Projects/<ProjectName>/Todos.md" todo verbose
-obsidian vault=$VAULT_NAME task path="Projects/<ProjectName>/Todos.md" line=<n> done
-\`\`\`
+- **Add:** Edit \`$INSTALL_DIR/Projects/<ProjectName>/Todos.md\`, append \`- [ ] <task>\`
+- **Complete:** Edit the file, replace \`- [ ] <task text>\` with \`- [x] <task text>\`
+- **View:** Read \`$INSTALL_DIR/Projects/<ProjectName>/Todos.md\`
 
 ## Session Handoff
 
-At the end of a session, overwrite \`Last Session.md\`:
+At the end of a session, use the **Write** tool to overwrite \`$INSTALL_DIR/Projects/<ProjectName>/Last Session.md\`:
 
-\`\`\`bash
-obsidian vault=$VAULT_NAME write path="Projects/<ProjectName>/Last Session.md" content="# Last Session\n\n**Date:** \$(date +%Y-%m-%d)\n\n## Worked On\n- <what was done>\n\n## Unfinished\n- <what's left>\n\n## Notes\n- <anything the next session should know>\n"
+\`\`\`markdown
+# Last Session
+
+**Date:** YYYY-MM-DD
+
+## Worked On
+- <what was done>
+
+## Unfinished
+- <what's left>
+
+## Notes
+- <anything the next session should know>
 \`\`\`
 
-## Interpreting \$ARGUMENTS
+Keep it under 20 lines.
+
+## PULSE
+
+When you learn something reusable (a gotcha, a pattern, a tool quirk), **Edit** \`$INSTALL_DIR/PULSE.md\` to append one line prefixed with the project name. Don't duplicate what's already in HEART.md.
+
+## Bootstrapping a New Project
+
+If the project folder doesn't exist, create all files using the **Write** tool:
+- \`Projects/<ProjectName>/Changelog.md\`
+- \`Projects/<ProjectName>/Todos.md\`
+- \`Projects/<ProjectName>/Notes.md\`
+- \`Projects/<ProjectName>/Last Session.md\`
+- \`Projects/<ProjectName>/Context Map.md\`
+
+## Context Priming
+
+Check \`Context Map.md\` when the user asks to work on specific files. If a path pattern matches, read the linked doc before starting.
+
+## Interpreting \\\$ARGUMENTS
 
 | User says | Action |
 |-----------|--------|
 | \`todo <task>\` | Add a new todo item to Todos.md |
-| \`done\` | Show completed tasks, or mark matching task done |
-| \`status\` | Show incomplete todos and recent changelog entries |
+| \`done\` | Mark matching task as done in Todos.md |
+| \`status\` | Show incomplete todos |
 | \`todos\` | List all incomplete todos |
-| \`bootstrap\` | Create the project folder structure in the vault |
+| \`bootstrap\` | Create the project folder structure |
 | \`handoff\` | Write the Last Session summary |
 
-## Important Notes
+## Important
 
-- Never delete or overwrite existing content -- only append or toggle tasks.
-- Always read before writing when checking for duplicate date headings.
+- Never delete existing content -- only append or toggle tasks.
 - Keep changelog entries concise -- one line per change.
-- Use \`\n\` for newlines in content parameters.
 SKILLEOF
 
 # --- Run shared setup ---
