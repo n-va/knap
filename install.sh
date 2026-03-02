@@ -9,7 +9,7 @@
 # macOS only. Requires Homebrew for dependency installation.
 # Install: bash <(curl -fsSL https://raw.githubusercontent.com/n-va/knap/main/install.sh)
 
-set -e
+set -ex
 
 # --- Install gum if missing ---
 
@@ -257,10 +257,10 @@ CONVENTIONS
 # Join a team or start fresh
 # =============================================================================
 
-CHOICE=$(gum choose --header "Do you have an existing Knap repo?" "Join a team -- I have a repo URL" "Start fresh")
+CHOICE=$(gum choose --header "Do you have an existing Knap repo?" "Join a team -- I have a repo URL" "Start fresh") || true
 
 if [[ "$CHOICE" == "Join a team"* ]]; then
-    REPO_URL=$(gum input --placeholder "https://github.com/your-team/knap" --prompt "Repo URL: ")
+    REPO_URL=$(gum input --placeholder "https://github.com/your-team/knap" --prompt "Repo URL: ") || true
 
     if [ -z "$REPO_URL" ]; then
         gum style --foreground 196 "Error: repo URL is required."
