@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="assets/knap-black.png" alt="Knap" width="300">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/knap.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/knap-black.png">
+    <img src="assets/knap-black.png" alt="Knap" width="300">
+  </picture>
 </p>
 
 <p align="center">
