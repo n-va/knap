@@ -372,45 +372,42 @@ Write both files now using the Write tool. Overwrite whatever is there."
         return
     fi
 
-    # Spinner in background — Ctrl+C kills everything
-    local spinner_chars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    _knap_spin() {
-        local i=0
-        while true; do
-            printf "\r  %s Claude is reading the codebase..." "${spinner_chars:$i:1}"
-            i=$(( (i + 1) % ${#spinner_chars} ))
-            sleep 0.1
-        done
-    }
-    _knap_spin &
-    local spin_pid=$!
-
-    # Ensure cleanup on Ctrl+C or exit
-    trap 'kill $spin_pid 2>/dev/null; printf "\r\033[K"; echo ""; faint "Cancelled."; exit 130' INT
-    trap 'kill $spin_pid 2>/dev/null; printf "\r\033[K"' EXIT
-
-    local claude_output
-    claude_output=$(CLAUDECODE= "$claude_bin" -p \
+    # Run claude in background so we can kill it on Ctrl+C
+    local tmp_output=$(mktemp)
+    CLAUDECODE= "$claude_bin" -p \
         --model sonnet \
         --allowedTools "Read Glob Grep Write" \
         --dangerously-skip-permissions \
-        "$claude_prompt" 2>&1)
-    local claude_exit=$?
+        "$claude_prompt" > "$tmp_output" 2>&1 &
+    local claude_pid=$!
 
-    kill $spin_pid 2>/dev/null
-    wait $spin_pid 2>/dev/null
+    # Spinner in foreground — Ctrl+C kills everything
+    local spinner_chars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    trap 'kill $claude_pid 2>/dev/null; wait $claude_pid 2>/dev/null; printf "\r\033[K"; rm -f "$tmp_output"; echo ""; faint "Cancelled."; trap - INT EXIT; exit 130' INT
+    trap 'kill $claude_pid 2>/dev/null; printf "\r\033[K"; rm -f "$tmp_output"' EXIT
+
+    local i=0
+    while kill -0 $claude_pid 2>/dev/null; do
+        printf "\r  %s Claude is reading the codebase..." "${spinner_chars:$i:1}"
+        i=$(( (i + 1) % ${#spinner_chars} ))
+        sleep 0.1
+    done
     printf "\r\033[K"
 
-    # Reset traps
+    wait $claude_pid
+    local claude_exit=$?
+
     trap - INT EXIT
 
     if [ $claude_exit -eq 0 ]; then
-        echo "$claude_output"
+        cat "$tmp_output"
+        rm -f "$tmp_output"
         echo ""
         success "✓ Claude analysis complete"
         faint "  Review: $project_dir/Notes.md"
         faint "  Review: $project_dir/Context Map.md"
     else
+        rm -f "$tmp_output"
         echo ""
         warn "Claude analysis failed — bash-generated files are still in place"
     fi
