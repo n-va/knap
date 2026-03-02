@@ -1,6 +1,11 @@
-# Knap
+<p align="center">
+  <img src="assets/knap-black.png" alt="Knap" width="300">
+</p>
 
-Persistent knowledge layer for AI-assisted development. Session handoff, team conventions, and project context for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — powered by [Obsidian](https://obsidian.md/).
+<p align="center">
+  Persistent knowledge layer for AI-assisted development.<br>
+  Session handoff, team conventions, and project context for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> — powered by <a href="https://obsidian.md/">Obsidian</a>.
+</p>
 
 Named after [knapping](https://en.wikipedia.org/wiki/Knapping) — the ancient process of shaping obsidian into tools.
 
@@ -31,8 +36,8 @@ The installer gives you two options:
 
 - [Obsidian](https://obsidian.md/) 1.12+ with CLI enabled (Settings > General > Command line interface)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- PHP 8.1+ (for the interactive setup, or use the bash installer directly)
 - git
+- [gum](https://github.com/charmbracelet/gum) + [jq](https://jqlang.github.io/jq/) (auto-installed via Homebrew if missing)
 
 ## How it works
 
