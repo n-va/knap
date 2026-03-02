@@ -1,15 +1,14 @@
 #!/bin/bash
 # Knap — persistent knowledge layer for AI-assisted development
-# Install: curl -fsSL https://raw.githubusercontent.com/n-va/knap/main/install.sh | bash
+# Install: curl -fsSL https://raw.githubusercontent.com/n-va/knap/main/install.sh -o /tmp/knap-install.sh && bash /tmp/knap-install.sh
 #
 # Knap uses Obsidian as the storage layer and Claude Code hooks for automation.
 # It gives AI sessions persistent memory, project context, and team conventions
 # without sending data to third-party services.
 #
 # macOS only. Requires Homebrew for dependency installation.
-# Install: curl -fsSL https://raw.githubusercontent.com/n-va/knap/main/install.sh -o /tmp/knap-install.sh && bash /tmp/knap-install.sh
 
-set -ex
+set -e
 
 # --- Install gum if missing ---
 
@@ -282,8 +281,9 @@ if [[ "$CHOICE" == "Join a team"* ]]; then
     else
         gum style --faint "Cloning $REPO_URL..."
         if ! git clone --quiet "$REPO_URL" "$INSTALL_DIR" 2>&1; then
+            echo ""
             gum style --foreground 196 "Error: failed to clone $REPO_URL"
-            gum style --foreground 196 "Check the URL and your access permissions."
+            gum style --faint "For private repos, use an SSH URL (git@...) or authenticated HTTPS."
             exit 1
         fi
     fi
