@@ -141,6 +141,12 @@ if [[ -f "\$VAULT_DIR/HEART.md" ]]; then
     echo ""
 fi
 
+if [[ -f "\$VAULT_DIR/GOTCHAS.md" ]]; then
+    echo "## GOTCHAS (things that will bite you)"
+    cat "\$VAULT_DIR/GOTCHAS.md"
+    echo ""
+fi
+
 if [[ -f "\$PROJECT_DIR/Last Session.md" ]]; then
     echo "## Last Session"
     cat "\$PROJECT_DIR/Last Session.md"
@@ -249,6 +255,7 @@ PARTS=()
 PROJECTS=\$(echo "\$CHANGED" | grep '^Projects/' | cut -d/ -f2 | sort -u | xargs 2>/dev/null)
 echo "\$CHANGED" | grep -q '^skills/' && PARTS+=("skills")
 echo "\$CHANGED" | grep -q '^HEART\.md' && PARTS+=("HEART")
+echo "\$CHANGED" | grep -q '^GOTCHAS\.md' && PARTS+=("GOTCHAS")
 echo "\$CHANGED" | grep -q '^PULSE\.md' && PARTS+=("PULSE")
 for p in \$PROJECTS; do PARTS+=("\$p"); done
 MSG=\$(printf '%s\n' "\${PARTS[@]}" | awk '!seen[\$0]++' | paste -sd', ' - | sed 's/,/, /g')
@@ -335,7 +342,8 @@ $MARKER
 
 ## Session End
 - **Last Session:** Overwrite the project's \`Last Session.md\` with a brief summary of what was worked on, what's done, what's unfinished. Keep it under 20 lines.
-- **PULSE:** When you learn something reusable, append it to \`$INSTALL_DIR/PULSE.md\` via Obsidian CLI. One line per learning, prefixed with the project name.
+- **GOTCHAS:** When you hit something that would trip up a future session — a silent failure, a misleading API, a tool quirk, an environment assumption — append it to \`$INSTALL_DIR/GOTCHAS.md\`. One line, tagged with the tech. These are injected at session start.
+- **PULSE:** When you learn something general, append it to \`$INSTALL_DIR/PULSE.md\`. One line per learning, prefixed with the project name. Review periodically — promote to HEART or GOTCHAS.
 
 ## Obsidian Project Tracking
 - Project knowledge is maintained in an Obsidian vault called "$VAULT_NAME" at \`$INSTALL_DIR\` under \`Projects/<ProjectName>/\`.
@@ -539,8 +547,16 @@ HEARTEOF
 
 # --- PULSE.md ---
 
+cat > GOTCHAS.md << 'GOTCHAEOF'
+Things that will bite you if you forget. One line per gotcha. Tag with the relevant tech.
+
+---
+GOTCHAEOF
+
+# --- PULSE.md ---
+
 cat > PULSE.md << 'PULSEEOF'
-Raw learnings captured from Claude Code sessions. Review periodically — promote the good stuff to HEART, delete the rest.
+Raw learnings captured from Claude Code sessions. Review periodically — promote the good stuff to HEART, sharp warnings to GOTCHAS, delete the rest.
 
 ---
 PULSEEOF
@@ -571,7 +587,8 @@ When Claude starts a session, it reads your team's conventions, picks up where t
 Session Start                         Session End
     │                                     │
     ├─ Read HEART.md (team conventions)   ├─ Mark completed tasks in Todos.md
-    ├─ Read Todos.md (open tasks)         ├─ Write Last Session.md (handoff)
+    ├─ Read GOTCHAS.md (learned traps)    ├─ Write Last Session.md (handoff)
+    ├─ Read Todos.md (open tasks)         ├─ Append gotchas to GOTCHAS.md
     ├─ Read Last Session.md (continuity)  ├─ Append learnings to PULSE.md
     ├─ Read Context Map.md (file→docs)    └─ Auto-commit & push vault
     └─ Start working
@@ -587,7 +604,8 @@ Session Start                         Session End
 | File | Purpose |
 |------|---------|
 | **\`HEART.md\`** | Team DNA — how we build, code conventions, stack preferences, lessons learned. Claude reads this first, every session. |
-| **\`PULSE.md\`** | Raw learnings captured during sessions. A scratchpad that feeds into HEART over time. |
+| **\`GOTCHAS.md\`** | Sharp technical warnings — things that will bite you. Injected at session start alongside HEART. |
+| **\`PULSE.md\`** | Raw learnings captured during sessions. Review and promote to HEART or GOTCHAS. |
 | **\`Projects/<Name>/Todos.md\`** | Active task list. Claude adds tasks before starting work and checks them off when done. |
 | **\`Projects/<Name>/Last Session.md\`** | Handoff summary. What was worked on, what's unfinished, what the next session needs to know. |
 | **\`Projects/<Name>/Changelog.md\`** | Auto-populated from git commits via a post-commit hook. The historical record. |
@@ -665,6 +683,7 @@ Use Claude Code's **Read**, **Edit**, and **Write** tools to work with vault fil
 \`\`\`
 $INSTALL_DIR/
   HEART.md                            # Team conventions, read every session
+  GOTCHAS.md                          # Sharp warnings, read every session
   PULSE.md                            # Raw learnings inbox
   Projects/
     <ProjectName>/
@@ -718,9 +737,13 @@ At the end of a session, use the **Write** tool to overwrite \`$INSTALL_DIR/Proj
 
 Keep it under 20 lines.
 
+## GOTCHAS
+
+When you hit something that would trip up a future session — a silent failure, a misleading API, a tool quirk, an environment assumption that doesn't hold — **Edit** \`$INSTALL_DIR/GOTCHAS.md\` to append one line tagged with the relevant tech. Format: \`[tag] the gotcha\`. These are injected at every session start.
+
 ## PULSE
 
-When you learn something reusable (a gotcha, a pattern, a tool quirk), **Edit** \`$INSTALL_DIR/PULSE.md\` to append one line prefixed with the project name. Don't duplicate what's already in HEART.md.
+When you learn something general, **Edit** \`$INSTALL_DIR/PULSE.md\` to append one line prefixed with the project name. Review periodically — promote sharp warnings to GOTCHAS, conventions to HEART.
 
 ## Bootstrapping a New Project
 

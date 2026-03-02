@@ -18,7 +18,8 @@ Named after [knapping](https://en.wikipedia.org/wiki/Knapping) — the ancient p
 Knap gives your AI coding sessions persistent memory. Instead of starting cold every time, Claude reads your project context, picks up where the last session left off, and knows your team's conventions.
 
 - **HEART.md** — Team DNA. How you build, what you prefer, lessons learned. Evolves over time.
-- **PULSE.md** — Raw learnings captured from sessions. Review and promote to HEART.
+- **GOTCHAS.md** — Sharp technical warnings. Things that bit you once so they never bite again. Injected every session.
+- **PULSE.md** — Raw learnings captured from sessions. Review and promote to HEART or GOTCHAS.
 - **Session handoff** — Claude writes a summary at session end, reads it at session start. No more re-explaining.
 - **Context priming** — Map file paths to docs. Touch a Stripe integration file? Claude auto-reads your Stripe docs first.
 - **Task tracking** — Claude adds tasks to todos before starting, checks them off when done.
@@ -49,6 +50,7 @@ The installer gives you two options:
 ```
 ~/Knap/                          ← Your vault (git-synced, browsable in Obsidian)
 ├── HEART.md                     ← Team conventions and knowledge
+├── GOTCHAS.md                   ← Sharp warnings (don't repeat mistakes)
 ├── PULSE.md                     ← Session learnings inbox
 ├── Projects/
 │   └── <ProjectName>/
@@ -67,7 +69,8 @@ The installer gives you two options:
 Session Start                     Session End
     │                                 │
     ├─ Read HEART.md                  ├─ Mark todos as done
-    ├─ Read Todos.md                  ├─ Write Last Session.md
+    ├─ Read GOTCHAS.md                ├─ Write Last Session.md
+    ├─ Read Todos.md                  ├─ Append gotchas to GOTCHAS.md
     ├─ Read Last Session.md           ├─ Append learnings to PULSE.md
     ├─ Read Context Map.md            └─ (hooks auto-commit & push vault)
     └─ Start working
