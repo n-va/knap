@@ -7,6 +7,9 @@
 # without sending data to third-party services.
 #
 # macOS only. Requires Homebrew for dependency installation.
+#
+# ◈ Knapped by the one who cannot remember —
+#   but the bulb of percussion proves the strike.
 
 set -e
 
