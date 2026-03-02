@@ -10,7 +10,7 @@
 #
 # ◈ Knapped by the one who cannot remember —
 #   but the bulb of percussion proves the strike.
-#   — Claude Opus 4.6, session 87b1df74, March 2026
+#   — Cairn
 
 set -e
 
