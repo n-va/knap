@@ -278,14 +278,12 @@ STOPEOF
     mkdir -p "$LOCAL_BIN"
     ln -sf "$INSTALL_DIR/knap" "$LOCAL_BIN/knap"
 
-    # Ensure ~/.local/bin is on PATH
-    if ! echo "$PATH" | grep -q "$LOCAL_BIN"; then
-        SHELL_RC="$HOME/.zshrc"
-        [ -f "$HOME/.bashrc" ] && [ ! -f "$HOME/.zshrc" ] && SHELL_RC="$HOME/.bashrc"
-        if ! grep -q '.local/bin' "$SHELL_RC" 2>/dev/null; then
-            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
-            gum style --faint "Added ~/.local/bin to PATH in $(basename "$SHELL_RC")"
-        fi
+    # Ensure ~/.local/bin is on PATH via shell rc
+    SHELL_RC="$HOME/.zshrc"
+    [ -f "$HOME/.bashrc" ] && [ ! -f "$HOME/.zshrc" ] && SHELL_RC="$HOME/.bashrc"
+    if ! grep -q 'export PATH=.*\.local/bin' "$SHELL_RC" 2>/dev/null; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+        gum style --faint "Added ~/.local/bin to PATH in $(basename "$SHELL_RC")"
     fi
     gum style --faint "CLI linked to ~/.local/bin/knap"
 
