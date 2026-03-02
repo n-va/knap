@@ -28,7 +28,7 @@ Knap gives your AI coding sessions persistent memory. Instead of starting cold e
 ## Install
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/n-va/knap/main/install.sh)
+curl -fsSL https://raw.githubusercontent.com/n-va/knap/main/install.sh -o /tmp/knap-install.sh && bash /tmp/knap-install.sh
 ```
 
 The installer gives you two options:

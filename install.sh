@@ -7,7 +7,7 @@
 # without sending data to third-party services.
 #
 # macOS only. Requires Homebrew for dependency installation.
-# Install: bash <(curl -fsSL https://raw.githubusercontent.com/n-va/knap/main/install.sh)
+# Install: curl -fsSL https://raw.githubusercontent.com/n-va/knap/main/install.sh -o /tmp/knap-install.sh && bash /tmp/knap-install.sh
 
 set -ex
 
