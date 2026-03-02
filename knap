@@ -324,6 +324,59 @@ cmd_init() {
     echo ""
     success "✓ $project_name initialised"
     faint "  $project_dir/"
+
+    # --- Optional Claude analysis ---
+
+    if ! command -v claude &>/dev/null; then
+        faint "  Tip: install Claude Code to auto-generate richer Notes & Context Map"
+        return
+    fi
+
+    echo ""
+    if command -v gum &>/dev/null; then
+        gum confirm "Let Claude analyse the project for richer Notes & Context Map?" || return
+    else
+        read -p "Let Claude analyse the project for richer Notes & Context Map? [y/N] " -n 1 -r
+        echo ""
+        [[ ! $REPLY =~ ^[Yy]$ ]] && return
+    fi
+
+    echo ""
+    msg "Claude is analysing $project_name..."
+    faint "  This may take a minute."
+    echo ""
+
+    local claude_prompt="You are initialising a Knap project vault for \"$project_name\".
+The project source is at: $project_root
+The vault files are at: $project_dir
+
+Your job is to read the codebase and write two files. Be concise and useful -- these files are read by AI sessions to understand the project quickly.
+
+1. Notes.md ($project_dir/Notes.md)
+
+Write a project overview covering: what the project does (one paragraph), tech stack with versions where available, key directories and what they contain, important architectural decisions or patterns, any integrations with external services, and how to run the project locally (dev server, build commands). Keep it under 60 lines. Use markdown headers. No fluff.
+
+2. Context Map.md ($project_dir/Context Map.md)
+
+Build a markdown table mapping file path patterns to documentation or context that would help understand them. Format: | Path Pattern | Read | with backtick-wrapped paths. Look for API integrations and their docs (check docs/ folder, README, CLAUDE.md), complex subsystems that need explanation, config files that control important behaviour, and test directories and what they cover. Only include paths that genuinely need context -- do not map obvious things.
+
+Write both files now using the Write tool. Overwrite whatever is there."
+
+    claude -p \
+        --model sonnet \
+        --allowedTools "Read Glob Grep Write" \
+        "$claude_prompt" \
+        2>/dev/null
+
+    if [ $? -eq 0 ]; then
+        echo ""
+        success "✓ Claude analysis complete"
+        faint "  Review: $project_dir/Notes.md"
+        faint "  Review: $project_dir/Context Map.md"
+    else
+        echo ""
+        warn "Claude analysis failed — bash-generated files are still in place"
+    fi
 }
 
 cmd_populate() {
