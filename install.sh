@@ -267,8 +267,13 @@ STOPEOF
 
     # --- Symlink CLI ---
 
-    ln -sf "$INSTALL_DIR/knap" /usr/local/bin/knap
-    gum style --faint "CLI linked to /usr/local/bin/knap"
+    if ln -sf "$INSTALL_DIR/knap" /usr/local/bin/knap 2>/dev/null; then
+        gum style --faint "CLI linked to /usr/local/bin/knap"
+    else
+        gum style --faint "Linking CLI to /usr/local/bin/knap (requires sudo)..."
+        sudo ln -sf "$INSTALL_DIR/knap" /usr/local/bin/knap
+        gum style --faint "CLI linked to /usr/local/bin/knap"
+    fi
 
     # --- Configure Claude Code hooks in settings.json ---
 
