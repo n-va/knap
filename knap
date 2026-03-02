@@ -362,18 +362,31 @@ Build a markdown table mapping file path patterns to documentation or context th
 
 Write both files now using the Write tool. Overwrite whatever is there."
 
-    if cd "$project_root" && CLAUDECODE= claude -p \
+    cd "$project_root"
+
+    # Resolve claude binary (may be aliased or in ~/.local/bin)
+    local claude_bin
+    claude_bin=$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")
+    if [ ! -x "$claude_bin" ]; then
+        warn "Claude CLI not found"
+        return
+    fi
+
+    faint "  (Running: $claude_bin -p --model sonnet)"
+    echo ""
+
+    if CLAUDECODE= "$claude_bin" -p \
         --model sonnet \
         --allowedTools "Read Glob Grep Write" \
         --dangerously-skip-permissions \
-        "$claude_prompt"; then
+        "$claude_prompt" 2>&1; then
         echo ""
         success "✓ Claude analysis complete"
         faint "  Review: $project_dir/Notes.md"
         faint "  Review: $project_dir/Context Map.md"
     else
         echo ""
-        warn "Claude analysis failed — bash-generated files are still in place"
+        warn "Claude analysis failed (exit $?) — bash-generated files are still in place"
     fi
 }
 
