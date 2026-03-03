@@ -321,6 +321,26 @@ cmd_init() {
         faint "  ⊘ Context Map.md — already has mappings, skipped"
     fi
 
+    # --- Copy project skills to vault ---
+    local skills_copied=0
+    local vault_skills="$VAULT_DIR/skills"
+    for skills_dir in "$project_root/.claude/skills" "$project_root/.github/skills"; do
+        [ -d "$skills_dir" ] || continue
+        for skill in "$skills_dir"/*/; do
+            [ -d "$skill" ] || continue
+            local skill_name=$(basename "$skill")
+            if [ -d "$vault_skills/$skill_name" ]; then
+                continue
+            fi
+            cp -r "$skill" "$vault_skills/$skill_name"
+            skills_copied=$((skills_copied + 1))
+            faint "  ✓ Skill copied: $skill_name"
+        done
+    done
+    if [ $skills_copied -eq 0 ]; then
+        faint "  ⊘ No new skills to copy"
+    fi
+
     echo ""
     success "✓ $project_name initialised"
     faint "  $project_dir/"
