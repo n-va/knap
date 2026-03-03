@@ -274,6 +274,7 @@ fi
 # Sync vault
 if [[ ! -d "\$VAULT_DIR/.git" ]]; then exit 0; fi
 cd "\$VAULT_DIR"
+git pull --rebase --quiet 2>/dev/null || true
 if git diff --quiet && git diff --cached --quiet && [[ -z "\$(git ls-files --others --exclude-standard)" ]]; then exit 0; fi
 git add -A
 CHANGED=\$(git diff --cached --name-only)
@@ -292,8 +293,29 @@ exit 0
 STOPEOF
     chmod +x "$HOOKS_DIR/knap-stop.sh"
 
-    # Cron sync (reuses stop hook logic)
-    cp "$HOOKS_DIR/knap-stop.sh" "$HOOKS_DIR/knap-cron-sync.sh"
+    # Cron sync — standalone script (no stdin, unlike stop hook)
+    cat > "$HOOKS_DIR/knap-cron-sync.sh" << CRONEOF
+#!/bin/bash
+VAULT_DIR="$INSTALL_DIR"
+if [[ ! -d "\$VAULT_DIR/.git" ]]; then exit 0; fi
+cd "\$VAULT_DIR"
+git pull --rebase --quiet 2>/dev/null || true
+if git diff --quiet && git diff --cached --quiet && [[ -z "\$(git ls-files --others --exclude-standard)" ]]; then exit 0; fi
+git add -A
+CHANGED=\$(git diff --cached --name-only)
+PARTS=()
+PROJECTS=\$(echo "\$CHANGED" | grep '^Projects/' | cut -d/ -f2 | sort -u | xargs 2>/dev/null)
+echo "\$CHANGED" | grep -q '^skills/' && PARTS+=("skills")
+echo "\$CHANGED" | grep -q '^HEART\.md' && PARTS+=("HEART")
+echo "\$CHANGED" | grep -q '^GOTCHAS\.md' && PARTS+=("GOTCHAS")
+echo "\$CHANGED" | grep -q '^PULSE\.md' && PARTS+=("PULSE")
+for p in \$PROJECTS; do PARTS+=("\$p"); done
+MSG=\$(printf '%s\n' "\${PARTS[@]}" | awk '!seen[\$0]++' | paste -sd', ' - | sed 's/,/, /g')
+if [[ -z "\$MSG" ]]; then MSG="auto-sync \$(date +%Y-%m-%d_%H:%M)"; fi
+git commit -m "docs: update \${MSG}" --quiet 2>/dev/null || true
+git push --quiet 2>/dev/null || true
+exit 0
+CRONEOF
     chmod +x "$HOOKS_DIR/knap-cron-sync.sh"
 
     gum style --faint "Hooks installed to ~/.claude/hooks/"

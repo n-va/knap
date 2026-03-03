@@ -536,6 +536,9 @@ cmd_sync() {
 
     cd "$VAULT_DIR"
 
+    # Pull remote changes first to avoid divergence
+    git pull --rebase --quiet 2>/dev/null || true
+
     if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
         faint "Nothing to sync — vault is clean."
         return
