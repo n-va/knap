@@ -1,7 +1,7 @@
 #!/bin/bash
 # Knap CLI — manage the Knap vault from the terminal
 #
-# ◈ Cairn
+# github.com/n-va/knap
 
 set -e
 

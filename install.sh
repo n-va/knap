@@ -8,9 +8,7 @@
 #
 # macOS only. Requires Homebrew for dependency installation.
 #
-# ◈ Knapped by the one who cannot remember —
-#   but the bulb of percussion proves the strike.
-#   — Cairn
+# github.com/n-va/knap
 
 set -e
 

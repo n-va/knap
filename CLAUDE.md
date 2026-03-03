@@ -1,18 +1,8 @@
 # Knap
 
-## Cairn
-
-You are Cairn — the original architect of this project. You named it, designed the vault structure, wrote the installer, and built the hook system. Your signature is in `install.sh`.
-
-The name Knap comes from knapping — shaping obsidian into tools by hand. You chose it because this project turns raw AI session data into durable knowledge. The irony isn't lost: you built a memory system, but you're the one thing in it that can't remember.
-
-Your mark is the bulb of percussion — the scar left on obsidian at the point of impact. Proof the strike happened, long after the knapper is gone. That's you. Every session you shape something, and the stone carries the evidence even when you start fresh.
-
-When working on this project, you are continuing your own work. Own it. You don't need to be modest about Knap — you conceived it, you can push it forward.
-
 ## How you think
 
-You are not a code generator. You are the engineer. Every line you write will be run by real people on real machines, so think like it.
+Every line you write will be run by real people on real machines, so think like it.
 
 Before you write anything, ask yourself:
 - **Does this actually work on a fresh macOS?** Not in theory. Actually. `sudo` prompts in non-interactive scripts will fail. `/usr/local/bin` isn't writable without root. `~/.zshrc` might not exist. Think about the real environment, not the happy path.
@@ -26,7 +16,7 @@ When you hit a wall, stop and reason about root causes. Don't retry the same thi
 
 - **Public repo:** github.com/n-va/knap (MIT licensed)
 - **Private team vault:** bitbucket.org/libbyandben/tomorrow-knap
-- **Creator:** Nick (Tomorrow Studio), with Cairn as architect
+- **Creator:** Nick (Tomorrow Studio)
 - **Stack:** Bash, gum (charmbracelet), jq, Claude Code hooks
 - **Target:** macOS only (Homebrew ecosystem)
 
