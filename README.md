@@ -8,7 +8,7 @@
 
 <p align="center">
   Persistent knowledge layer for AI-assisted development.<br>
-  Session handoff, team conventions, and project context for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> — powered by <a href="https://obsidian.md/">Obsidian</a>.
+  Session handoff, team conventions, and project context for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> and <a href="https://openai.com/codex">OpenAI Codex</a> — powered by <a href="https://obsidian.md/">Obsidian</a>.
 </p>
 
 Named after [knapping](https://en.wikipedia.org/wiki/Knapping) — the ancient process of shaping obsidian into tools.
@@ -41,7 +41,7 @@ The installer gives you two options:
 
 - **macOS** with [Homebrew](https://brew.sh/)
 - [Obsidian](https://obsidian.md/) 1.12+ with CLI enabled (Settings > General > Command line interface)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and/or [OpenAI Codex](https://openai.com/codex) — installer asks which you use
 - git
 - [gum](https://github.com/charmbracelet/gum) + [jq](https://jqlang.github.io/jq/) (auto-installed via Homebrew if missing)
 
@@ -61,6 +61,9 @@ The installer gives you two options:
 │       └── Context Map.md       ← File path → doc mapping
 └── skills/
     └── obsidian-cli/            ← Symlinked to ~/.claude/skills/
+
+~/.claude/CLAUDE.md              ← Knap conventions injected (Claude Code)
+~/.codex/AGENTS.md               ← Knap conventions injected (OpenAI Codex)
 ```
 
 ### Session lifecycle
@@ -88,6 +91,17 @@ Session Start                     Session End
 | **Post-commit** | After `git commit` in Claude Code | Logs commit message to project's Changelog.md |
 | **Session sync** | When Claude finishes responding | Auto-commits and pushes vault changes |
 | **Cron sync** | Every 15 minutes | Safety net if hooks didn't fire |
+
+## Claude Code vs OpenAI Codex
+
+The installer asks which AI tool you use — Claude Code, OpenAI Codex, or both. Knap sets up the right convention files for each:
+
+| Tool | Convention file | What gets written |
+|------|----------------|-------------------|
+| Claude Code | `~/.claude/CLAUDE.md` | HEART.md summary + session hooks |
+| OpenAI Codex | `~/.codex/AGENTS.md` | HEART.md summary + conventions |
+
+`knap init` detects whichever tool is installed and uses it to auto-generate project Notes.md and Context Map.md.
 
 ## Why not OpenClaw / other tools?
 
