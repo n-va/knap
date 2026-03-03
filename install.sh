@@ -90,15 +90,23 @@ INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_DIR}"
 
 VAULT_NAME=$(basename "$INSTALL_DIR")
 CLAUDE_DIR="$HOME/.claude"
+CODEX_DIR="$HOME/.codex"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+AGENTS_MD="$CODEX_DIR/AGENTS.md"
+KNAP_CONFIG="$INSTALL_DIR/.knap-config"
 
 # =============================================================================
 # Shared setup — hooks, skills, conventions, cron
 # =============================================================================
 
 configure_knap() {
+    # --- Save config ---
+    if [ -n "$AI_TOOL" ] && [ -d "$INSTALL_DIR" ]; then
+        echo "ai_tool=$AI_TOOL" > "$KNAP_CONFIG"
+    fi
+
     # --- Symlink skills ---
 
     mkdir -p "$SKILLS_DIR"
@@ -338,48 +346,73 @@ STOPEOF
 
     gum style --faint "Claude Code hooks configured"
 
-    # --- Add conventions to CLAUDE.md ---
+    # --- Add conventions to AI config files ---
+
+    # Read tool preference from config, default to claude
+    AI_TOOL="claude"
+    if [ -f "$KNAP_CONFIG" ]; then
+        AI_TOOL=$(grep '^ai_tool=' "$KNAP_CONFIG" 2>/dev/null | cut -d= -f2 || echo "claude")
+    fi
+    AI_TOOL="${AI_TOOL:-claude}"
 
     MARKER="# Knap Conventions"
-    if [ -f "$CLAUDE_MD" ] && grep -q "$MARKER" "$CLAUDE_MD"; then
-        gum style --faint "Knap conventions already in CLAUDE.md (kept existing)"
-    else
-        cat >> "$CLAUDE_MD" << CONVENTIONS
+
+    write_knap_conventions() {
+        cat >> "$1" << CONVENTIONS
 
 $MARKER
 
 ## Session Start (ALWAYS do this on your FIRST response)
 1. Read \`$INSTALL_DIR/HEART.md\` — team-wide conventions, stack knowledge, and lessons learned.
-2. Read the current project's Obsidian notes from \`$INSTALL_DIR/Projects/<ProjectName>/\`:
+2. Read the current project Obsidian notes from \`$INSTALL_DIR/Projects/<ProjectName>/\`:
    - \`Notes.md\` — project overview and architecture
    - \`Todos.md\` — open tasks
-   - \`Last Session.md\` — what was worked on last, what's unfinished, what to pick up
+   - \`Last Session.md\` — what was worked on last, what is unfinished, what to pick up
    - \`Context Map.md\` — maps file paths to relevant docs (see Context Priming below)
-3. These reads should happen silently — use them to inform your work, don't narrate that you're doing it unless asked.
+3. These reads should happen silently — use them to inform your work, do not narrate unless asked.
 
 ## Context Priming
-- When the user asks you to work on specific files, check the project's \`Context Map.md\` for matching path patterns.
+- When the user asks you to work on specific files, check the project \`Context Map.md\` for matching path patterns.
 - If a match is found, read the linked Obsidian doc BEFORE starting work.
 
 ## Task Tracking
-- When the user asks you to do something, add it to the project's \`Todos.md\` via the Obsidian CLI before starting work.
+- When the user asks you to do something, add it to the project \`Todos.md\` before starting work.
 - When a task is complete, mark it as done in \`Todos.md\` (toggle the checkbox).
 - Do NOT manually write to \`Changelog.md\` — the post-commit hook automatically logs commit messages there.
 
 ## Session End
-- **Last Session:** Overwrite the project's \`Last Session.md\` with a brief summary of what was worked on, what's done, what's unfinished. Keep it under 20 lines.
-- **GOTCHAS:** When you hit something that would trip up a future session — a silent failure, a misleading API, a tool quirk, an environment assumption — append it to \`$INSTALL_DIR/GOTCHAS.md\`. One line, tagged with the tech. These are injected at session start.
-- **PULSE:** When you learn something general, append it to \`$INSTALL_DIR/PULSE.md\`. One line per learning, prefixed with the project name. Review periodically — promote to HEART or GOTCHAS.
+- **Last Session:** Overwrite the project \`Last Session.md\` with a brief summary of what was worked on, what is done, what is unfinished. Keep it under 20 lines.
+- **GOTCHAS:** When you hit something that would trip up a future session — a silent failure, a misleading API, a tool quirk, an environment assumption — append it to \`$INSTALL_DIR/GOTCHAS.md\`. One line, tagged with the tech.
+- **PULSE:** When you learn something general, append it to \`$INSTALL_DIR/PULSE.md\`. One line per learning, prefixed with the project name.
 
 ## Obsidian Project Tracking
 - Project knowledge is maintained in an Obsidian vault called "$VAULT_NAME" at \`$INSTALL_DIR\` under \`Projects/<ProjectName>/\`.
-- Use the \`obsidian-cli\` skill to read/update this when starting or finishing work on a project.
 
 ## Commits
 - Use conventional commits: \`feat:\`, \`fix:\`, \`chore:\`, \`refactor:\`, \`docs:\`, \`style:\`, \`test:\`, \`perf:\`
 - Do not add \`Co-Authored-By\` lines to commit messages.
 CONVENTIONS
-        gum style --faint "Knap conventions added to CLAUDE.md"
+    }
+
+    # Write to CLAUDE.md
+    if [ "$AI_TOOL" = "claude" ] || [ "$AI_TOOL" = "both" ]; then
+        if [ -f "$CLAUDE_MD" ] && grep -q "$MARKER" "$CLAUDE_MD"; then
+            gum style --faint "Knap conventions already in CLAUDE.md (kept existing)"
+        else
+            write_knap_conventions "$CLAUDE_MD"
+            gum style --faint "Knap conventions added to CLAUDE.md"
+        fi
+    fi
+
+    # Write to AGENTS.md (Codex)
+    if [ "$AI_TOOL" = "codex" ] || [ "$AI_TOOL" = "both" ]; then
+        mkdir -p "$CODEX_DIR"
+        if [ -f "$AGENTS_MD" ] && grep -q "$MARKER" "$AGENTS_MD"; then
+            gum style --faint "Knap conventions already in AGENTS.md (kept existing)"
+        else
+            write_knap_conventions "$AGENTS_MD"
+            gum style --faint "Knap conventions added to AGENTS.md"
+        fi
     fi
 
     # --- Add cron job ---
@@ -473,9 +506,12 @@ if [ "$KNAP_UPDATE_MODE" = true ]; then
     INSTALL_DIR="${KNAP_UPDATE_DIR:-$HOME/Knap}"
     VAULT_NAME=$(basename "$INSTALL_DIR")
     CLAUDE_DIR="$HOME/.claude"
+    CODEX_DIR="$HOME/.codex"
     SKILLS_DIR="$CLAUDE_DIR/skills"
     HOOKS_DIR="$CLAUDE_DIR/hooks"
     CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+    AGENTS_MD="$CODEX_DIR/AGENTS.md"
+    KNAP_CONFIG="$INSTALL_DIR/.knap-config"
 
     if [ ! -d "$INSTALL_DIR" ]; then
         echo "Error: vault not found at $INSTALL_DIR"
@@ -487,6 +523,18 @@ if [ "$KNAP_UPDATE_MODE" = true ]; then
     gum style --foreground 82 --bold "✓ Knap updated"
     exit 0
 fi
+
+# =============================================================================
+# AI tool selection
+# =============================================================================
+
+AI_TOOL=$(gum choose --header "Which AI coding tool do you use?" "Claude Code" "OpenAI Codex" "Both") || true
+case "$AI_TOOL" in
+    "Claude Code") AI_TOOL="claude" ;;
+    "OpenAI Codex") AI_TOOL="codex" ;;
+    "Both")        AI_TOOL="both" ;;
+    *)             AI_TOOL="claude" ;;
+esac
 
 # =============================================================================
 # Join a team or start fresh

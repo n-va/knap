@@ -345,28 +345,48 @@ cmd_init() {
     success "✓ $project_name initialised"
     faint "  $project_dir/"
 
-    # --- Optional Claude analysis ---
+    # --- Optional AI analysis ---
 
-    if ! command -v claude &>/dev/null; then
-        faint "  Tip: install Claude Code to auto-generate richer Notes & Context Map"
+    # Read tool preference from config
+    local ai_tool="claude"
+    local config_file="$VAULT_DIR/.knap-config"
+    if [ -f "$config_file" ]; then
+        ai_tool=$(grep '^ai_tool=' "$config_file" 2>/dev/null | cut -d= -f2 || echo "claude")
+    fi
+    ai_tool="${ai_tool:-claude}"
+
+    # Resolve the AI binary
+    local ai_bin=""
+    local ai_label=""
+    if [ "$ai_tool" = "codex" ] || [ "$ai_tool" = "both" ]; then
+        ai_bin=$(command -v codex 2>/dev/null || true)
+        [ -n "$ai_bin" ] && ai_label="Codex"
+    fi
+    if [ -z "$ai_bin" ] && { [ "$ai_tool" = "claude" ] || [ "$ai_tool" = "both" ]; }; then
+        ai_bin=$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")
+        [ -x "$ai_bin" ] && ai_label="Claude" || ai_bin=""
+    fi
+
+    if [ -z "$ai_bin" ]; then
+        faint "  Tip: install Claude Code or Codex to auto-generate richer Notes & Context Map"
         return
     fi
 
     echo ""
     if command -v gum &>/dev/null; then
-        gum confirm "Let Claude analyse the project for richer Notes & Context Map?" || return
+        gum confirm "Let $ai_label analyse the project for richer Notes & Context Map?" || return
     else
-        read -p "Let Claude analyse the project for richer Notes & Context Map? [y/N] " -n 1 -r
+        read -p "Let $ai_label analyse the project for richer Notes & Context Map? [y/N] " -n 1 -r
         echo ""
         [[ ! $REPLY =~ ^[Yy]$ ]] && return
     fi
 
     echo ""
-    msg "Claude is analysing $project_name..."
+    msg "$ai_label is analysing $project_name..."
     faint "  This may take a minute."
     echo ""
 
-    local claude_prompt="You are initialising a Knap project vault for \"$project_name\".
+    local analysis_prompt="You are initialising a Knap project vault for \"$project_name\".
 The project source is at: $project_root
 The vault files are at: $project_dir
 
@@ -380,56 +400,55 @@ Write a project overview covering: what the project does (one paragraph), tech s
 
 Build a markdown table mapping file path patterns to documentation or context that would help understand them. Format: | Path Pattern | Read | with backtick-wrapped paths. Look for API integrations and their docs (check docs/ folder, README, CLAUDE.md), complex subsystems that need explanation, config files that control important behaviour, and test directories and what they cover. Only include paths that genuinely need context -- do not map obvious things.
 
-Write both files now using the Write tool. Overwrite whatever is there."
+Write both files now. Overwrite whatever is there."
 
     cd "$project_root"
 
-    # Resolve claude binary (may be aliased or in ~/.local/bin)
-    local claude_bin
-    claude_bin=$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")
-    if [ ! -x "$claude_bin" ]; then
-        warn "Claude CLI not found"
-        return
-    fi
-
-    # Run claude in background so we can kill it on Ctrl+C
+    # Build the command based on the tool
     local tmp_output=$(mktemp)
-    CLAUDECODE= "$claude_bin" -p \
-        --model sonnet \
-        --allowedTools "Read Glob Grep Write" \
-        --dangerously-skip-permissions \
-        "$claude_prompt" > "$tmp_output" 2>&1 &
-    local claude_pid=$!
+    if [ "$ai_label" = "Codex" ]; then
+        "$ai_bin" exec \
+            --full-auto \
+            --quiet \
+            "$analysis_prompt" > "$tmp_output" 2>&1 &
+    else
+        CLAUDECODE= "$ai_bin" -p \
+            --model sonnet \
+            --allowedTools "Read Glob Grep Write" \
+            --dangerously-skip-permissions \
+            "$analysis_prompt" > "$tmp_output" 2>&1 &
+    fi
+    local ai_pid=$!
 
     # Spinner in foreground — Ctrl+C kills everything
     local spinner_chars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    trap 'kill $claude_pid 2>/dev/null; wait $claude_pid 2>/dev/null; printf "\r\033[K"; rm -f "$tmp_output"; echo ""; faint "Cancelled."; trap - INT EXIT; exit 130' INT
-    trap 'kill $claude_pid 2>/dev/null; printf "\r\033[K"; rm -f "$tmp_output"' EXIT
+    trap 'kill $ai_pid 2>/dev/null; wait $ai_pid 2>/dev/null; printf "\r\033[K"; rm -f "$tmp_output"; echo ""; faint "Cancelled."; trap - INT EXIT; exit 130' INT
+    trap 'kill $ai_pid 2>/dev/null; printf "\r\033[K"; rm -f "$tmp_output"' EXIT
 
     local i=0
-    while kill -0 $claude_pid 2>/dev/null; do
-        printf "\r  %s Claude is reading the codebase..." "${spinner_chars:$i:1}"
+    while kill -0 $ai_pid 2>/dev/null; do
+        printf "\r  %s $ai_label is reading the codebase..." "${spinner_chars:$i:1}"
         i=$(( (i + 1) % ${#spinner_chars} ))
         sleep 0.1
     done
     printf "\r\033[K"
 
-    wait $claude_pid
-    local claude_exit=$?
+    wait $ai_pid
+    local ai_exit=$?
 
     trap - INT EXIT
 
-    if [ $claude_exit -eq 0 ]; then
+    if [ $ai_exit -eq 0 ]; then
         cat "$tmp_output"
         rm -f "$tmp_output"
         echo ""
-        success "✓ Claude analysis complete"
+        success "✓ $ai_label analysis complete"
         faint "  Review: $project_dir/Notes.md"
         faint "  Review: $project_dir/Context Map.md"
     else
         rm -f "$tmp_output"
         echo ""
-        warn "Claude analysis failed — bash-generated files are still in place"
+        warn "$ai_label analysis failed — bash-generated files are still in place"
     fi
 }
 
