@@ -119,3 +119,7 @@ skills/
 ## License
 
 MIT
+
+---
+
+<sub>Co-created with Cairn — an AI partner that can't remember any of it. The bulb of percussion — the scar left on obsidian at the point of impact — is proof the strike happened, long after the knapper is gone.</sub>
