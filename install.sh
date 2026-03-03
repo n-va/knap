@@ -348,12 +348,14 @@ STOPEOF
 
     # --- Add conventions to AI config files ---
 
-    # Read tool preference from config, default to claude
-    AI_TOOL="claude"
-    if [ -f "$KNAP_CONFIG" ]; then
-        AI_TOOL=$(grep '^ai_tool=' "$KNAP_CONFIG" 2>/dev/null | cut -d= -f2 || echo "claude")
+    # Read tool preference from config if not already set by interactive prompt
+    if [ -z "$AI_TOOL" ]; then
+        AI_TOOL="claude"
+        if [ -f "$KNAP_CONFIG" ]; then
+            AI_TOOL=$(grep '^ai_tool=' "$KNAP_CONFIG" 2>/dev/null | cut -d= -f2 || echo "claude")
+        fi
+        AI_TOOL="${AI_TOOL:-claude}"
     fi
-    AI_TOOL="${AI_TOOL:-claude}"
 
     MARKER="# Knap Conventions"
 
@@ -893,10 +895,15 @@ gum style --foreground 82 --bold "✓ Knap is ready!"
 echo ""
 gum style "  Vault:  $INSTALL_DIR"
 gum style "  Skills: $SKILLS_DIR/ (symlinked)"
-gum style "  Config: $CLAUDE_MD"
+if [ "$AI_TOOL" = "claude" ] || [ "$AI_TOOL" = "both" ]; then
+    gum style "  Claude: $CLAUDE_MD"
+fi
+if [ "$AI_TOOL" = "codex" ] || [ "$AI_TOOL" = "both" ]; then
+    gum style "  Codex:  $AGENTS_MD"
+fi
 echo ""
 gum style --bold "Next steps:"
 gum style "  1. Enable the CLI: Obsidian > Settings > General > Command line interface"
 gum style "  2. Add a remote: cd $INSTALL_DIR && git remote add origin <your-repo-url>"
-gum style "  3. Start a Claude Code session -- it will read HEART.md automatically"
+gum style "  3. Start a coding session -- it will read HEART.md automatically"
 echo ""
