@@ -76,33 +76,77 @@ cmd_project() {
 
     mkdir -p "$project_dir"
 
-    cat > "$project_dir/Changelog.md" << 'EOF'
-Timestamped log of changes and updates.
-EOF
+    local today=$(date +%Y-%m-%d)
 
-    cat > "$project_dir/Todos.md" << 'EOF'
-- [ ] Review project and add initial notes
-EOF
+    cat > "$project_dir/STATUS.md" << EOF
+# $name
 
-    cat > "$project_dir/Notes.md" << 'EOF'
 ## Overview
+(What this project is, tech stack, URL, hosting)
 
-(Add project overview here)
+## Current State
+- [x] In active development
+- [ ] In maintenance mode
+- [ ] Paused / on hold
+- [ ] Archived
+
+## Last Updated
+$today
+
+## Key Decisions
+- (Record important decisions and WHY they were made)
+
+## Known Issues
+- (Things that are broken or risky right now)
 EOF
 
-    cat > "$project_dir/Last Session.md" << 'EOF'
-Updated automatically at the end of each Claude Code session.
+    cat > "$project_dir/PLAN.md" << 'EOF'
+# Plan
+
+## Now (Active Sprint / Current Focus)
+- [ ] Review project and add initial notes
+
+## Next (Queued, not started)
+
+## Later (Backlog, low priority)
+
+## Done (Recently Completed)
 EOF
 
-    cat > "$project_dir/Context Map.md" << 'EOF'
-When working on files matching these paths, read the linked doc for context.
+    cat > "$project_dir/LOG.md" << EOF
+# Log
 
-| Path Pattern | Read |
-|-------------|------|
+## $today — Initial Setup
+### What was done
+- Project scaffolded in Knap
+
+### Decisions made
+- (none yet)
+
+### Next session should
+- Review project and add initial notes
+- Set up CONTEXT.md with tech stack and key files
+EOF
+
+    cat > "$project_dir/CONTEXT.md" << 'EOF'
+# Context
+
+## Tech Stack
+- (Framework, language, version)
+
+## Key Files
+- (Important file paths and what they do)
+
+## Conventions
+- (Project-specific coding conventions)
+
+## Gotchas
+- (Things that will trip you up)
 EOF
 
     success "✓ Scaffolded project: $name"
     faint "  $project_dir/"
+    faint "  Files: STATUS.md, PLAN.md, LOG.md, CONTEXT.md"
 }
 
 cmd_projects() {
@@ -116,11 +160,16 @@ cmd_projects() {
     for dir in "$projects_dir"/*/; do
         [ -d "$dir" ] || continue
         local name=$(basename "$dir")
-        local todos=$(grep -c '^\- \[ \]' "$dir/Todos.md" 2>/dev/null || true)
-        local done=$(grep -c '^\- \[x\]' "$dir/Todos.md" 2>/dev/null || true)
+        # Support both old (Todos.md) and new (PLAN.md) conventions
+        local plan_file="$dir/PLAN.md"
+        [ ! -f "$plan_file" ] && plan_file="$dir/Todos.md"
+        local todos=$(grep -c '^\- \[ \]' "$plan_file" 2>/dev/null || true)
+        local done=$(grep -c '^\- \[x\]' "$plan_file" 2>/dev/null || true)
         todos="${todos:-0}"
         done="${done:-0}"
-        echo "  $name  ($todos open, $done done)"
+        local format="old"
+        [ -f "$dir/STATUS.md" ] && format="new"
+        echo "  $name  ($todos open, $done done) [$format]"
         count=$((count + 1))
     done
 
@@ -586,6 +635,150 @@ cmd_status() {
     fi
 }
 
+cmd_migrate() {
+    local project_name="$1"
+    local projects_dir="$VAULT_DIR/Projects"
+
+    if [ -n "$project_name" ]; then
+        # Migrate a single project
+        local dir="$projects_dir/$project_name"
+        if [ ! -d "$dir" ]; then
+            warn "Project '$project_name' not found"
+            exit 1
+        fi
+        migrate_project "$dir" "$project_name"
+    else
+        # Migrate all projects
+        for dir in "$projects_dir"/*/; do
+            [ -d "$dir" ] || continue
+            local name=$(basename "$dir")
+            migrate_project "$dir" "$name"
+        done
+    fi
+
+    success "✓ Migration complete"
+    faint "  Old files preserved as *.old.md — delete when satisfied"
+}
+
+migrate_project() {
+    local dir="$1"
+    local name="$2"
+    local today=$(date +%Y-%m-%d)
+
+    # Skip if already migrated
+    if [ -f "$dir/STATUS.md" ]; then
+        faint "  ⊘ $name — already migrated"
+        return
+    fi
+
+    msg "  → Migrating $name"
+
+    # Notes.md → STATUS.md
+    if [ -f "$dir/Notes.md" ]; then
+        local notes_content=$(cat "$dir/Notes.md")
+        cat > "$dir/STATUS.md" << EOF
+# $name
+
+## Overview
+$notes_content
+
+## Current State
+- [x] In active development
+- [ ] In maintenance mode
+- [ ] Paused / on hold
+- [ ] Archived
+
+## Last Updated
+$today
+
+## Key Decisions
+
+## Known Issues
+EOF
+        mv "$dir/Notes.md" "$dir/Notes.old.md"
+    else
+        cat > "$dir/STATUS.md" << EOF
+# $name
+
+## Overview
+(Needs overview)
+
+## Current State
+- [x] In active development
+- [ ] In maintenance mode
+- [ ] Paused / on hold
+- [ ] Archived
+
+## Last Updated
+$today
+EOF
+    fi
+
+    # Todos.md → PLAN.md
+    if [ -f "$dir/Todos.md" ]; then
+        local todos_content=$(cat "$dir/Todos.md")
+        # Check if it already has section headers
+        if grep -q '^## ' "$dir/Todos.md"; then
+            # Has sections — use as-is but rename
+            cat > "$dir/PLAN.md" << EOF
+# Plan
+
+$todos_content
+EOF
+        else
+            # No sections — wrap in Now
+            cat > "$dir/PLAN.md" << EOF
+# Plan
+
+## Now (Active Sprint / Current Focus)
+$todos_content
+
+## Next (Queued, not started)
+
+## Later (Backlog, low priority)
+
+## Done (Recently Completed)
+EOF
+        fi
+        mv "$dir/Todos.md" "$dir/Todos.old.md"
+    fi
+
+    # Changelog.md + Last Session.md → LOG.md
+    local log_content=""
+    if [ -f "$dir/Changelog.md" ]; then
+        log_content=$(cat "$dir/Changelog.md")
+        mv "$dir/Changelog.md" "$dir/Changelog.old.md"
+    fi
+    if [ -f "$dir/Last Session.md" ]; then
+        local session_content=$(cat "$dir/Last Session.md")
+        log_content="## Last Session
+$session_content
+
+$log_content"
+        mv "$dir/Last Session.md" "$dir/Last Session.old.md"
+    fi
+    if [ -n "$log_content" ]; then
+        cat > "$dir/LOG.md" << EOF
+# Log
+
+$log_content
+EOF
+    fi
+
+    # Context Map.md → CONTEXT.md
+    if [ -f "$dir/Context Map.md" ]; then
+        local ctx_content=$(cat "$dir/Context Map.md")
+        cat > "$dir/CONTEXT.md" << EOF
+# Context
+
+$ctx_content
+EOF
+        mv "$dir/Context Map.md" "$dir/Context Map.old.md"
+    fi
+
+    success "  ✓ $name migrated"
+}
+
 cmd_help() {
     echo ""
     msg "knap — manage the Knap vault"
@@ -594,6 +787,7 @@ cmd_help() {
     echo "  knap project <name>   Scaffold a new project"
     echo "  knap populate         Scan local dirs and scaffold new projects"
     echo "  knap projects         List all projects"
+    echo "  knap migrate [name]   Migrate project(s) to new convention (STATUS/PLAN/LOG/CONTEXT)"
     echo "  knap sync             Commit & push vault changes"
     echo "  knap update           Pull latest hooks, skills & CLI from GitHub"
     echo "  knap status           Show vault info"
@@ -608,6 +802,7 @@ case "${1:-}" in
     project)  cmd_project "$2" ;;
     populate) cmd_populate ;;
     projects) cmd_projects ;;
+    migrate)  cmd_migrate "$2" ;;
     sync)     cmd_sync ;;
     update)   cmd_update ;;
     status)   cmd_status ;;
