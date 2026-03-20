@@ -18,12 +18,13 @@ Named after [knapping](https://en.wikipedia.org/wiki/Knapping) — the ancient p
 Knap gives your AI coding sessions persistent memory. Instead of starting cold every time, Claude reads your project context, picks up where the last session left off, and knows your team's conventions.
 
 - **HEART.md** — Team DNA. How you build, what you prefer, lessons learned. Evolves over time.
-- **GUARD.md** — Guardrails and technical warnings. Things that bit you once so they never bite again. Injected every session.
+- **GUARD.md** — Guardrails and technical warnings. Structured entries so AI can parse them reliably. Injected every session.
 - **RECENT.md** — Recent learnings inbox (AI auto-curates). Review and promote to HEART or GUARD.
-- **Session handoff** — Claude writes a summary at session end, reads it at session start. No more re-explaining.
-- **Context priming** — Map file paths to docs. Touch a Stripe integration file? Claude auto-reads your Stripe docs first.
-- **Task tracking** — Claude adds tasks to todos before starting, checks them off when done.
-- **Auto-changelog** — Git commits automatically log to the project changelog via hooks.
+- **STATUS.md** — Single source of truth per project: overview, current state, key decisions, known issues.
+- **PLAN.md** — Temporal task tracking: Now (active), Next (queued), Later (backlog), Done (with dates). Instant priority at a glance.
+- **LOG.md** — Structured session log: who, when, what was done, decisions made, next session instructions. No more re-explaining.
+- **CONTEXT.md** — Technical context: tech stack, key files, conventions, project-specific gotchas.
+- **Auto-logging** — Git commits automatically log to the project's LOG.md via hooks.
 - **Shared skills** — Claude Code skills stored in the vault, symlinked to `~/.claude/skills/`, synced via git.
 
 ## Install
@@ -50,15 +51,14 @@ The installer gives you two options:
 ```
 ~/Knap/                          ← Your vault (git-synced, browsable in Obsidian)
 ├── HEART.md                     ← Team conventions and knowledge
-├── GUARD.md                   ← Sharp warnings (don't repeat mistakes)
-├── RECENT.md                     ← Session learnings inbox
+├── GUARD.md                     ← Guardrails and technical warnings (structured entries)
+├── RECENT.md                    ← Session learnings inbox
 ├── Projects/
 │   └── <ProjectName>/
-│       ├── Notes.md             ← Project overview, tech stack
-│       ├── Changelog.md         ← Auto-populated from git commits
-│       ├── Todos.md             ← Task list (Claude manages this)
-│       ├── Last Session.md      ← Session handoff summary
-│       └── Context Map.md       ← File path → doc mapping
+│       ├── STATUS.md            ← Project overview, current state, key decisions
+│       ├── PLAN.md              ← Task tracking: Now / Next / Later / Done
+│       ├── LOG.md               ← Session log: who, when, what, next steps
+│       └── CONTEXT.md           ← Tech stack, key files, conventions, gotchas
 └── skills/
     └── obsidian-cli/            ← Symlinked to ~/.claude/skills/
 
@@ -71,24 +71,25 @@ The installer gives you two options:
 ```
 Session Start                     Session End
     │                                 │
-    ├─ Read HEART.md                  ├─ Mark todos as done
-    ├─ Read GUARD.md                ├─ Write Last Session.md
-    ├─ Read Todos.md                  ├─ Append gotchas to GUARD.md
-    ├─ Read Last Session.md           ├─ Append learnings to RECENT.md
-    ├─ Read Context Map.md            └─ (hooks auto-commit & push vault)
+    ├─ Read HEART.md                  ├─ Add LOG.md entry (who, what, decisions)
+    ├─ Read GUARD.md                  ├─ Update PLAN.md (move tasks, add new)
+    ├─ Read STATUS.md                 ├─ Update STATUS.md if state changed
+    ├─ Read LOG.md (latest entry)     ├─ Append gotchas to GUARD.md
+    ├─ Read PLAN.md                   ├─ Append learnings to RECENT.md
+    ├─ Read CONTEXT.md                └─ (hooks auto-commit & push vault)
     └─ Start working
          │
-         ├─ Add tasks to Todos.md
+         ├─ Update PLAN.md (Now tasks)
          ├─ Context-prime from docs
          ├─ Do the work
-         └─ Commit → auto-logs to Changelog.md
+         └─ Commit → auto-logs to LOG.md
 ```
 
 ### Automation hooks
 
 | Hook | Trigger | What it does |
 |------|---------|-------------|
-| **Post-commit** | After `git commit` in Claude Code | Logs commit message to project's Changelog.md |
+| **Post-commit** | After `git commit` in Claude Code | Logs commit message to project's LOG.md |
 | **Session sync** | When Claude finishes responding | Auto-commits and pushes vault changes |
 | **Cron sync** | Every 15 minutes | Safety net if hooks didn't fire |
 
@@ -101,7 +102,26 @@ The installer asks which AI tool you use — Claude Code, OpenAI Codex, or both.
 | Claude Code | `~/.claude/CLAUDE.md` | HEART.md summary + session hooks |
 | OpenAI Codex | `~/.codex/AGENTS.md` | HEART.md summary + conventions |
 
-`knap init` detects whichever tool is installed and uses it to auto-generate project Notes.md and Context Map.md.
+`knap init` detects whichever tool is installed and uses it to auto-generate project STATUS.md and CONTEXT.md.
+
+## Why this convention?
+
+The old per-project files (Notes.md, Changelog.md, Todos.md, Last Session.md, Context Map.md) were freeform — useful for humans, hard for AI to parse reliably. The new convention fixes that:
+
+- **Structured entries** — LOG.md and GUARD.md use consistent formats so AI can parse them without guessing.
+- **Temporal grouping** — PLAN.md organizes tasks as Now / Next / Later / Done. AI sees priority instantly instead of scanning a flat list.
+- **Session accountability** — LOG.md captures *who* did *what* and *what to do next*. No more "what was I working on?" across sessions.
+- **Validation-ready** — Pre-commit hooks can verify that LOG.md was updated before allowing a vault commit.
+
+### Migrating from old format
+
+If you have existing projects using the old convention:
+
+```bash
+knap migrate [project-name]
+```
+
+This converts old-format files to the new convention. Original files are preserved as `*.old.md` so nothing is lost.
 
 ## Why not OpenClaw / other tools?
 
