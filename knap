@@ -599,7 +599,7 @@ cmd_sync() {
     PROJECTS=$(echo "$CHANGED" | grep '^Projects/' | cut -d/ -f2 | sort -u | xargs 2>/dev/null)
     echo "$CHANGED" | grep -q '^skills/' && PARTS+=("skills")
     echo "$CHANGED" | grep -q '^HEART\.md' && PARTS+=("HEART")
-    echo "$CHANGED" | grep -q '^PULSE\.md' && PARTS+=("PULSE")
+    echo "$CHANGED" | grep -q '^RECENT\.md' && PARTS+=("RECENT")
     for p in $PROJECTS; do PARTS+=("$p"); done
     MSG=$(printf '%s\n' "${PARTS[@]}" | awk '!seen[$0]++' | paste -sd',' - | sed 's/,/, /g')
     if [ -z "$MSG" ]; then MSG="auto-sync $(date +%Y-%m-%d_%H:%M)"; fi

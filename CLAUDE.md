@@ -26,7 +26,7 @@ The project has two parts:
 
 1. **install.sh** — The public installer. Interactive (gum), handles both "join a team" and "start fresh" flows. Scaffolds vault structure, installs hooks, symlinks skills, configures Claude Code settings, sets up cron sync.
 
-2. **The vault** — What gets created. An Obsidian vault with HEART.md (team DNA), GOTCHAS.md (sharp warnings), PULSE.md (learnings inbox), per-project folders (todos, changelogs, session handoffs, context maps), and shared skills.
+2. **The vault** — What gets created. An Obsidian vault with HEART.md (team DNA), GUARD.md (sharp warnings), RECENT.md (learnings inbox), per-project folders (todos, changelogs, session handoffs, context maps), and shared skills.
 
 3. **knap** — CLI tool for vault management from the terminal. Symlinked to `~/.local/bin/knap` during install.
 
@@ -34,7 +34,7 @@ The project has two parts:
 
 Three hooks make the system self-sustaining:
 
-- **`knap-session-start.sh`** (UserPromptSubmit) — Fires once per session, injects HEART + GOTCHAS + project context directly into the conversation. Uses a TTL marker file so it doesn't fire on every message.
+- **`knap-session-start.sh`** (UserPromptSubmit) — Fires once per session, injects HEART + GUARD + project context directly into the conversation. Uses a TTL marker file so it doesn't fire on every message.
 - **`knap-post-commit.sh`** (PostToolUse on Bash) — Detects `git commit` commands, resolves project name from cwd, appends commit message to changelog via direct file write.
 - **`knap-stop.sh`** (Stop) — Checks if Last Session.md was updated, reminds if not, then auto-commits and pushes vault changes.
 
