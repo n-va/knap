@@ -3,7 +3,7 @@
 #
 # github.com/n-va/knap
 
-KNAP_VERSION="1.2.1"
+KNAP_VERSION="1.3.0"
 
 set -e
 
@@ -86,20 +86,11 @@ cmd_project() {
 ## Overview
 (What this project is, tech stack, URL, hosting)
 
-## Current State
-- [x] In active development
-- [ ] In maintenance mode
-- [ ] Paused / on hold
-- [ ] Archived
-
-## Last Updated
-$today
-
 ## Key Decisions
-- (Record important decisions and WHY they were made)
+(Record important decisions and WHY they were made)
 
 ## Known Issues
-- (Things that are broken or risky right now)
+(Things that are broken or risky right now)
 EOF
 
     cat > "$project_dir/PLAN.md" << 'EOF'
@@ -118,16 +109,8 @@ EOF
     cat > "$project_dir/LOG.md" << EOF
 # Log
 
-## $today — Initial Setup
-### What was done
+## $today
 - Project scaffolded in Knap
-
-### Decisions made
-- (none yet)
-
-### Next session should
-- Review project and add initial notes
-- Set up CONTEXT.md with tech stack and key files
 EOF
 
     cat > "$project_dir/CONTEXT.md" << 'EOF'
@@ -940,22 +923,676 @@ cmd_disable() {
     fi
 }
 
+# --- Project Resolution ---
+# Resolves project name + vault dir from cwd (or explicit name).
+# Sets: RESOLVED_PROJECT_NAME, RESOLVED_PROJECT_DIR
+# Returns 1 if resolution fails.
+
+resolve_project() {
+    local explicit_name="$1"
+    RESOLVED_PROJECT_NAME=""
+    RESOLVED_PROJECT_DIR=""
+
+    if [ -n "$explicit_name" ]; then
+        RESOLVED_PROJECT_NAME="$explicit_name"
+        RESOLVED_PROJECT_DIR="$VAULT_DIR/Projects/$explicit_name"
+        if [ ! -d "$RESOLVED_PROJECT_DIR" ]; then
+            warn "Project '$explicit_name' not found in vault"
+            return 1
+        fi
+        return 0
+    fi
+
+    # Resolve from cwd
+    local cwd
+    cwd="$(pwd)"
+    local SEARCH_DIRS=("$HOME/Sites" "$HOME/Projects" "$HOME/Code" "$HOME/Developer" "$HOME/repos" "$HOME/src" "$HOME/workspace")
+
+    for base in "${SEARCH_DIRS[@]}"; do
+        if [[ "$cwd" == "$base/"* ]]; then
+            local rel="${cwd#$base/}"
+            local folder="${rel%%/*}"
+            RESOLVED_PROJECT_NAME=$(echo "$folder" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
+            break
+        fi
+    done
+
+    # Fallback to git root
+    if [ -z "$RESOLVED_PROJECT_NAME" ]; then
+        local project_root
+        project_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
+        if [ -z "$project_root" ]; then
+            warn "Could not resolve project from $(pwd)"
+            warn "Run from a project directory or pass the project name: knap <cmd> <project>"
+            return 1
+        fi
+        RESOLVED_PROJECT_NAME=$(basename "$project_root" | sed -E 's/(^|[-_])([a-z])/\U\2/g; s/[-_]/ /g')
+    fi
+
+    RESOLVED_PROJECT_DIR="$VAULT_DIR/Projects/$RESOLVED_PROJECT_NAME"
+
+    if [ ! -d "$RESOLVED_PROJECT_DIR" ]; then
+        warn "Project '$RESOLVED_PROJECT_NAME' not found in vault"
+        faint "Run 'knap init' to scaffold it first"
+        return 1
+    fi
+
+    return 0
+}
+
+# --- User-Driven Commands ---
+
+cmd_todo() {
+    local section="Now"
+    local text=""
+
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --next)   section="Next"; shift ;;
+            --later)  section="Later"; shift ;;
+            --now)    section="Now"; shift ;;
+            -p)       shift; resolve_project "$1" || return; shift ;;
+            *)        text="$text $1"; shift ;;
+        esac
+    done
+    text="${text# }"  # trim leading space
+
+    # Resolve project if not set by -p flag
+    if [ -z "$RESOLVED_PROJECT_DIR" ]; then
+        resolve_project "" || return
+    fi
+
+    # Prompt if no text given
+    if [ -z "$text" ]; then
+        if command -v gum &>/dev/null; then
+            text=$(gum input --placeholder "What needs doing?") || return
+        else
+            read -rp "Todo: " text
+        fi
+    fi
+
+    [ -z "$text" ] && return
+
+    local plan_file="$RESOLVED_PROJECT_DIR/PLAN.md"
+
+    # Create PLAN.md if missing
+    if [ ! -f "$plan_file" ]; then
+        cat > "$plan_file" << 'EOF'
+# Plan
+
+## Now (Active Sprint / Current Focus)
+
+## Next (Queued, not started)
+
+## Later (Backlog, low priority)
+
+## Done (Recently Completed)
+EOF
+    fi
+
+    # Find the section header and insert after it
+    local section_pattern
+    case "$section" in
+        Now)   section_pattern="^## Now" ;;
+        Next)  section_pattern="^## Next" ;;
+        Later) section_pattern="^## Later" ;;
+    esac
+
+    # Insert the todo after the section header line
+    local tmp=$(mktemp)
+    local inserted=false
+    while IFS= read -r line; do
+        echo "$line" >> "$tmp"
+        if [ "$inserted" = false ] && [[ "$line" =~ $section_pattern ]]; then
+            echo "- [ ] $text" >> "$tmp"
+            inserted=true
+        fi
+    done < "$plan_file"
+
+    if [ "$inserted" = true ]; then
+        mv "$tmp" "$plan_file"
+        success "✓ Added to $section: $text"
+        faint "  $RESOLVED_PROJECT_NAME/PLAN.md"
+    else
+        rm -f "$tmp"
+        # Section not found — append under Now
+        echo "- [ ] $text" >> "$plan_file"
+        success "✓ Added: $text"
+        faint "  $RESOLVED_PROJECT_NAME/PLAN.md (appended)"
+    fi
+}
+
+cmd_done() {
+    local explicit_project=""
+
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -p) shift; explicit_project="$1"; shift ;;
+            *)  shift ;;
+        esac
+    done
+
+    resolve_project "$explicit_project" || return
+
+    local plan_file="$RESOLVED_PROJECT_DIR/PLAN.md"
+    if [ ! -f "$plan_file" ]; then
+        warn "No PLAN.md found for $RESOLVED_PROJECT_NAME"
+        return
+    fi
+
+    # Collect open todos
+    local -a todos=()
+    local -a line_numbers=()
+    local line_num=0
+    while IFS= read -r line; do
+        line_num=$((line_num + 1))
+        if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[[[:space:]]\][[:space:]](.+)$ ]]; then
+            todos+=("${BASH_REMATCH[1]}")
+            line_numbers+=("$line_num")
+        fi
+    done < "$plan_file"
+
+    if [ ${#todos[@]} -eq 0 ]; then
+        faint "No open todos in $RESOLVED_PROJECT_NAME"
+        return
+    fi
+
+    # Let user pick which ones are done
+    local selected
+    if command -v gum &>/dev/null; then
+        selected=$(printf '%s\n' "${todos[@]}" | gum choose --no-limit --header "Mark as done:") || return
+    else
+        echo "Open todos:"
+        local i=1
+        for todo in "${todos[@]}"; do
+            echo "  $i) $todo"
+            i=$((i + 1))
+        done
+        read -rp "Enter numbers to complete (comma-separated): " nums
+        selected=""
+        IFS=',' read -ra indices <<< "$nums"
+        for idx in "${indices[@]}"; do
+            idx=$(echo "$idx" | tr -d ' ')
+            if [ "$idx" -ge 1 ] && [ "$idx" -le ${#todos[@]} ] 2>/dev/null; then
+                [ -n "$selected" ] && selected+=$'\n'
+                selected+="${todos[$((idx - 1))]}"
+            fi
+        done
+    fi
+
+    [ -z "$selected" ] && return
+
+    local today=$(date +%Y-%m-%d)
+    local completed_count=0
+
+    # Process each selected todo
+    while IFS= read -r done_item; do
+        [ -z "$done_item" ] && continue
+
+        # Mark as done in place (checkbox)
+        local escaped
+        escaped=$(printf '%s\n' "$done_item" | sed 's/[[\.*^$()+?{|]/\\&/g')
+        sed -i'' -e "s/- \[ \] ${escaped}/- [x] ${done_item}/" "$plan_file"
+
+        completed_count=$((completed_count + 1))
+    done <<< "$selected"
+
+    if [ $completed_count -gt 0 ]; then
+        success "✓ Completed $completed_count todo(s) in $RESOLVED_PROJECT_NAME"
+    fi
+}
+
+cmd_log() {
+    local text=""
+    local explicit_project=""
+
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -p) shift; explicit_project="$1"; shift ;;
+            *)  text="$text $1"; shift ;;
+        esac
+    done
+    text="${text# }"
+
+    resolve_project "$explicit_project" || return
+
+    # Prompt if no text given
+    if [ -z "$text" ]; then
+        if command -v gum &>/dev/null; then
+            text=$(gum input --placeholder "What happened?") || return
+        else
+            read -rp "Log entry: " text
+        fi
+    fi
+
+    [ -z "$text" ] && return
+
+    local log_file="$RESOLVED_PROJECT_DIR/LOG.md"
+    local today=$(date +%Y-%m-%d)
+
+    # Create LOG.md if missing
+    if [ ! -f "$log_file" ]; then
+        cat > "$log_file" << EOF
+# Log
+
+## $today
+- $text
+EOF
+        success "✓ Logged: $text"
+        faint "  $RESOLVED_PROJECT_NAME/LOG.md"
+        return
+    fi
+
+    # Check if today's date section exists
+    if grep -q "^## $today" "$log_file"; then
+        # Append under today's section (after the ## date line)
+        local tmp=$(mktemp)
+        local inserted=false
+        while IFS= read -r line; do
+            echo "$line" >> "$tmp"
+            if [ "$inserted" = false ] && [[ "$line" == "## $today"* ]]; then
+                echo "- $text" >> "$tmp"
+                inserted=true
+            fi
+        done < "$log_file"
+        mv "$tmp" "$log_file"
+    else
+        # Insert new date section after "# Log" header
+        local tmp=$(mktemp)
+        local inserted=false
+        while IFS= read -r line; do
+            echo "$line" >> "$tmp"
+            if [ "$inserted" = false ] && [[ "$line" == "# Log"* ]]; then
+                echo "" >> "$tmp"
+                echo "## $today" >> "$tmp"
+                echo "- $text" >> "$tmp"
+                inserted=true
+            fi
+        done < "$log_file"
+        if [ "$inserted" = true ]; then
+            mv "$tmp" "$log_file"
+        else
+            # Fallback: prepend
+            rm -f "$tmp"
+            local existing
+            existing=$(cat "$log_file")
+            cat > "$log_file" << EOF
+# Log
+
+## $today
+- $text
+
+$existing
+EOF
+        fi
+    fi
+
+    success "✓ Logged: $text"
+    faint "  $RESOLVED_PROJECT_NAME/LOG.md"
+}
+
+cmd_note() {
+    local text=""
+    local explicit_project=""
+
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -p) shift; explicit_project="$1"; shift ;;
+            *)  text="$text $1"; shift ;;
+        esac
+    done
+    text="${text# }"
+
+    resolve_project "$explicit_project" || return
+
+    # Prompt if no text given
+    if [ -z "$text" ]; then
+        if command -v gum &>/dev/null; then
+            text=$(gum write --placeholder "Note (Ctrl+D to save)...") || return
+        else
+            read -rp "Note: " text
+        fi
+    fi
+
+    [ -z "$text" ] && return
+
+    local status_file="$RESOLVED_PROJECT_DIR/STATUS.md"
+
+    if [ ! -f "$status_file" ]; then
+        warn "No STATUS.md found for $RESOLVED_PROJECT_NAME"
+        return
+    fi
+
+    # Append under Known Issues section, or at end of file
+    if grep -q "^## Known Issues" "$status_file"; then
+        local tmp=$(mktemp)
+        local inserted=false
+        while IFS= read -r line; do
+            echo "$line" >> "$tmp"
+            if [ "$inserted" = false ] && [[ "$line" == "## Known Issues"* ]]; then
+                echo "- $text" >> "$tmp"
+                inserted=true
+            fi
+        done < "$status_file"
+        mv "$tmp" "$status_file"
+    else
+        echo "" >> "$status_file"
+        echo "## Notes" >> "$status_file"
+        echo "- $text" >> "$status_file"
+    fi
+
+    success "✓ Noted: $text"
+    faint "  $RESOLVED_PROJECT_NAME/STATUS.md"
+}
+
+cmd_review() {
+    local explicit_project=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -p) shift; explicit_project="$1"; shift ;;
+            *)  shift ;;
+        esac
+    done
+
+    resolve_project "$explicit_project" || return
+
+    local plan_file="$RESOLVED_PROJECT_DIR/PLAN.md"
+    local log_file="$RESOLVED_PROJECT_DIR/LOG.md"
+    local today=$(date +%Y-%m-%d)
+
+    msg "Reviewing $RESOLVED_PROJECT_NAME"
+    echo ""
+
+    # --- Step 1: Show open todos, mark completed ones ---
+    if [ -f "$plan_file" ]; then
+        local -a todos=()
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[[[:space:]]\][[:space:]](.+)$ ]]; then
+                todos+=("${BASH_REMATCH[1]}")
+            fi
+        done < "$plan_file"
+
+        if [ ${#todos[@]} -gt 0 ]; then
+            echo ""
+            msg "Open todos (${#todos[@]}):"
+
+            local selected=""
+            if command -v gum &>/dev/null; then
+                selected=$(printf '%s\n' "${todos[@]}" | gum choose --no-limit --header "What got done this session?") || true
+            else
+                local i=1
+                for todo in "${todos[@]}"; do
+                    echo "  $i) $todo"
+                    i=$((i + 1))
+                done
+                read -rp "Completed (comma-separated numbers, or Enter to skip): " nums
+                if [ -n "$nums" ]; then
+                    IFS=',' read -ra indices <<< "$nums"
+                    for idx in "${indices[@]}"; do
+                        idx=$(echo "$idx" | tr -d ' ')
+                        if [ "$idx" -ge 1 ] && [ "$idx" -le ${#todos[@]} ] 2>/dev/null; then
+                            [ -n "$selected" ] && selected+=$'\n'
+                            selected+="${todos[$((idx - 1))]}"
+                        fi
+                    done
+                fi
+            fi
+
+            if [ -n "$selected" ]; then
+                local completed_items=()
+                while IFS= read -r done_item; do
+                    [ -z "$done_item" ] && continue
+                    local escaped
+                    escaped=$(printf '%s\n' "$done_item" | sed 's/[[\.*^$()+?{|]/\\&/g')
+                    sed -i'' -e "s/- \[ \] ${escaped}/- [x] ${done_item}/" "$plan_file"
+                    completed_items+=("$done_item")
+                done <<< "$selected"
+
+                if [ ${#completed_items[@]} -gt 0 ]; then
+                    success "  ✓ Marked ${#completed_items[@]} done"
+                fi
+            fi
+        else
+            faint "  No open todos"
+        fi
+    fi
+
+    # --- Step 2: Add new todos ---
+    echo ""
+    msg "Any new todos? (empty line to finish)"
+
+    local new_todos=()
+    while true; do
+        local new_todo=""
+        if command -v gum &>/dev/null; then
+            new_todo=$(gum input --placeholder "New todo (Enter to finish)") || break
+        else
+            read -rp "  > " new_todo
+        fi
+
+        [ -z "$new_todo" ] && break
+        new_todos+=("$new_todo")
+    done
+
+    if [ ${#new_todos[@]} -gt 0 ] && [ -f "$plan_file" ]; then
+        for todo in "${new_todos[@]}"; do
+            # Insert under Now section
+            local tmp=$(mktemp)
+            local inserted=false
+            while IFS= read -r line; do
+                echo "$line" >> "$tmp"
+                if [ "$inserted" = false ] && [[ "$line" =~ ^##[[:space:]]Now ]]; then
+                    echo "- [ ] $todo" >> "$tmp"
+                    inserted=true
+                fi
+            done < "$plan_file"
+            if [ "$inserted" = true ]; then
+                mv "$tmp" "$plan_file"
+            else
+                rm -f "$tmp"
+                echo "- [ ] $todo" >> "$plan_file"
+            fi
+        done
+        success "  ✓ Added ${#new_todos[@]} new todo(s)"
+    fi
+
+    # --- Step 3: Log entry ---
+    echo ""
+    msg "Session summary for the log:"
+
+    local summary=""
+    if command -v gum &>/dev/null; then
+        summary=$(gum write --placeholder "What happened this session? (Ctrl+D to save)") || true
+    else
+        read -rp "  Summary: " summary
+    fi
+
+    if [ -n "$summary" ]; then
+        # Build the log entry
+        local log_entry=""
+        log_entry+="### What was done\n"
+        log_entry+="$summary\n"
+
+        # Include completed items if any
+        if [ ${#completed_items[@]} -gt 0 ]; then
+            log_entry+="\n### Completed\n"
+            for item in "${completed_items[@]}"; do
+                log_entry+="- $item\n"
+            done
+        fi
+
+        # Include new todos if any
+        if [ ${#new_todos[@]} -gt 0 ]; then
+            log_entry+="\n### Added\n"
+            for item in "${new_todos[@]}"; do
+                log_entry+="- $item\n"
+            done
+        fi
+
+        # Write to LOG.md
+        if [ ! -f "$log_file" ]; then
+            printf "# Log\n\n## %s\n%b" "$today" "$log_entry" > "$log_file"
+        elif grep -q "^## $today" "$log_file"; then
+            # Append to existing date section
+            local tmp=$(mktemp)
+            local inserted=false
+            while IFS= read -r line; do
+                echo "$line" >> "$tmp"
+                if [ "$inserted" = false ] && [[ "$line" == "## $today"* ]]; then
+                    printf '%b' "$log_entry" >> "$tmp"
+                    inserted=true
+                fi
+            done < "$log_file"
+            mv "$tmp" "$log_file"
+        else
+            # New date section
+            local tmp=$(mktemp)
+            local inserted=false
+            while IFS= read -r line; do
+                echo "$line" >> "$tmp"
+                if [ "$inserted" = false ] && [[ "$line" == "# Log"* ]]; then
+                    echo "" >> "$tmp"
+                    echo "## $today" >> "$tmp"
+                    printf '%b' "$log_entry" >> "$tmp"
+                    inserted=true
+                fi
+            done < "$log_file"
+            mv "$tmp" "$log_file"
+        fi
+
+        success "  ✓ Logged to $RESOLVED_PROJECT_NAME/LOG.md"
+    fi
+
+    # --- Step 4: Update last updated in STATUS.md ---
+    local status_file="$RESOLVED_PROJECT_DIR/STATUS.md"
+    if [ -f "$status_file" ]; then
+        sed -i'' -e "s/^## Last Updated.*/## Last Updated\n$today/" "$status_file"
+    fi
+
+    echo ""
+    success "✓ Review complete for $RESOLVED_PROJECT_NAME"
+}
+
+cmd_ship() {
+    local explicit_project=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -p) shift; explicit_project="$1"; shift ;;
+            *)  shift ;;
+        esac
+    done
+
+    resolve_project "$explicit_project" || return
+
+    msg "Ship check for $RESOLVED_PROJECT_NAME"
+    echo ""
+
+    local plan_file="$RESOLVED_PROJECT_DIR/PLAN.md"
+
+    # Show remaining open todos as a sanity check
+    if [ -f "$plan_file" ]; then
+        local open_count
+        open_count=$(grep -c '^\- \[ \]' "$plan_file" 2>/dev/null || true)
+        open_count="${open_count:-0}"
+
+        if [ "$open_count" -gt 0 ]; then
+            warn "  ⚠ $open_count open todo(s) remaining"
+            echo ""
+            grep '^\- \[ \]' "$plan_file" | while IFS= read -r line; do
+                faint "    $line"
+            done
+            echo ""
+
+            local proceed=true
+            if command -v gum &>/dev/null; then
+                gum confirm "Continue with review before shipping?" || proceed=false
+            else
+                read -rp "Continue with review before shipping? [Y/n] " -n 1 -r
+                echo ""
+                [[ "$REPLY" =~ ^[Nn]$ ]] && proceed=false
+            fi
+
+            [ "$proceed" = false ] && return
+        else
+            success "  ✓ All todos complete"
+        fi
+    fi
+
+    # Run review
+    echo ""
+    cmd_review ${explicit_project:+-p "$explicit_project"}
+
+    # Sync vault
+    echo ""
+    cmd_sync
+
+    echo ""
+    success "✓ Ready to ship $RESOLVED_PROJECT_NAME"
+}
+
+cmd_open() {
+    local explicit_project=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -p) shift; explicit_project="$1"; shift ;;
+            *)  shift ;;
+        esac
+    done
+
+    resolve_project "$explicit_project" || return
+
+    if command -v open &>/dev/null; then
+        open "$RESOLVED_PROJECT_DIR"
+        faint "Opened $RESOLVED_PROJECT_NAME in Finder"
+    elif command -v xdg-open &>/dev/null; then
+        xdg-open "$RESOLVED_PROJECT_DIR"
+        faint "Opened $RESOLVED_PROJECT_NAME"
+    else
+        echo "$RESOLVED_PROJECT_DIR"
+    fi
+}
+
 cmd_help() {
     echo ""
     msg "knap — manage the Knap vault"
     echo ""
-    echo "  knap init             Auto-populate project from cwd (stack, git log, TODOs)"
-    echo "  knap project <name>   Scaffold a new project"
-    echo "  knap populate         Scan local dirs and scaffold new projects"
-    echo "  knap projects         List all projects"
-    echo "  knap migrate [name]   Migrate project(s) to new convention (STATUS/PLAN/LOG/CONTEXT)"
-    echo "  knap sync             Commit & push vault changes"
-    echo "  knap update           Pull latest hooks, skills & CLI from GitHub"
-    echo "  knap status           Show vault info"
-    echo "  knap enable           Enable knap hooks in Claude Code"
-    echo "  knap disable          Disable knap hooks in Claude Code"
-    echo "  knap help             Show this help"
-    echo "  knap version          Show version"
+    echo "  Project Management:"
+    echo "    knap init             Scaffold project from cwd (detects stack, git log, TODOs)"
+    echo "    knap project <name>   Scaffold a new empty project"
+    echo "    knap populate         Scan local dirs and scaffold new projects"
+    echo "    knap projects         List all projects"
+    echo ""
+    echo "  Day-to-Day:"
+    echo "    knap todo \"text\"      Add a TODO to PLAN.md (--next, --later for other sections)"
+    echo "    knap done             Interactively mark TODOs as complete"
+    echo "    knap log \"text\"       Add a changelog entry under today's date"
+    echo "    knap note \"text\"      Add a note to STATUS.md"
+    echo ""
+    echo "  Session Flow:"
+    echo "    knap review           End-of-session review (mark done, add todos, write log)"
+    echo "    knap ship             Pre-deploy: review + sync"
+    echo ""
+    echo "  Vault:"
+    echo "    knap sync             Commit & push vault changes"
+    echo "    knap open             Open project vault dir in Finder"
+    echo "    knap status           Show vault info"
+    echo "    knap migrate [name]   Migrate project(s) to new convention"
+    echo ""
+    echo "  Config:"
+    echo "    knap enable           Enable knap hooks in Claude Code"
+    echo "    knap disable          Disable knap hooks in Claude Code"
+    echo "    knap update           Pull latest hooks, skills & CLI"
+    echo "    knap version          Show version"
+    echo ""
+    echo "  Most commands auto-detect the project from your cwd."
+    echo "  Use -p <name> to target a specific project."
     echo ""
 }
 
@@ -970,6 +1607,13 @@ case "${1:-}" in
     project)  cmd_project "$2" ;;
     populate) cmd_populate ;;
     projects) cmd_projects ;;
+    todo)     shift; cmd_todo "$@" ;;
+    done)     shift; cmd_done "$@" ;;
+    log)      shift; cmd_log "$@" ;;
+    note)     shift; cmd_note "$@" ;;
+    review)   shift; cmd_review "$@" ;;
+    ship)     shift; cmd_ship "$@" ;;
+    open)     shift; cmd_open "$@" ;;
     migrate)  cmd_migrate "$2" ;;
     sync)     cmd_sync ;;
     update)   cmd_update ;;

@@ -28,7 +28,7 @@ The project has two parts:
 
 2. **The vault** — What gets created. An Obsidian vault with HEART.md (team DNA), GUARD.md (sharp warnings), RECENT.md (learnings inbox), per-project folders (todos, changelogs, session handoffs, context maps), and shared skills.
 
-3. **knap** — CLI tool for vault management from the terminal. Symlinked to `~/.local/bin/knap` during install.
+3. **knap** — CLI tool for vault management from the terminal. Symlinked to `~/.local/bin/knap` during install. User-driven — the dev uses knap commands to capture decisions, mark progress, and log changes. AI sessions read these files for context; humans write them.
 
 ### Hook system
 
