@@ -80,58 +80,48 @@ cmd_project() {
 
     local today=$(date +%Y-%m-%d)
 
-    cat > "$project_dir/STATUS.md" << EOF
+    cat > "$project_dir/CONTEXT.md" << EOF
 # $name
 
 ## Overview
-(What this project is, tech stack, URL, hosting)
+(What this project is, one paragraph)
 
-## Key Decisions
-(Record important decisions and WHY they were made)
+## Stack
+(Framework, language, versions, hosting)
 
-## Known Issues
-(Things that are broken or risky right now)
+## Key Files
+(Important file paths and what they do)
+
+## Decisions
+(Important decisions and WHY they were made)
+
+## Gotchas
+(Things that will trip you up)
 EOF
 
     cat > "$project_dir/PLAN.md" << 'EOF'
 # Plan
 
-## Now (Active Sprint / Current Focus)
+## Now
 - [ ] Review project and add initial notes
 
-## Next (Queued, not started)
+## Next
 
-## Later (Backlog, low priority)
+## Later
 
-## Done (Recently Completed)
+## Done
 EOF
 
     cat > "$project_dir/LOG.md" << EOF
 # Log
 
 ## $today
-- Project scaffolded in Knap
-EOF
-
-    cat > "$project_dir/CONTEXT.md" << 'EOF'
-# Context
-
-## Tech Stack
-- (Framework, language, version)
-
-## Key Files
-- (Important file paths and what they do)
-
-## Conventions
-- (Project-specific coding conventions)
-
-## Gotchas
-- (Things that will trip you up)
+- Project scaffolded
 EOF
 
     success "✓ Scaffolded project: $name"
     faint "  $project_dir/"
-    faint "  Files: STATUS.md, PLAN.md, LOG.md, CONTEXT.md"
+    faint "  Files: CONTEXT.md, PLAN.md, LOG.md"
 }
 
 cmd_projects() {
@@ -152,9 +142,7 @@ cmd_projects() {
         local done=$(grep -c '^\- \[x\]' "$plan_file" 2>/dev/null || true)
         todos="${todos:-0}"
         done="${done:-0}"
-        local format="old"
-        [ -f "$dir/STATUS.md" ] && format="new"
-        echo "  $name  ($todos open, $done done) [$format]"
+        echo "  $name  ($todos open, $done done)"
         count=$((count + 1))
     done
 
@@ -251,53 +239,83 @@ cmd_init() {
     done
     notes+='```\n'
 
-    # Write Notes.md (only if still default placeholder)
-    if grep -q "(Add project overview here)" "$project_dir/Notes.md" 2>/dev/null; then
-        printf '%b' "$notes" > "$project_dir/Notes.md"
-        faint "  ✓ Notes.md — stack & structure detected"
+    # Enrich CONTEXT.md with detected stack & structure
+    local context_file="$project_dir/CONTEXT.md"
+    if grep -q "(What this project is" "$context_file" 2>/dev/null; then
+        # Still has placeholder — replace the Overview and Stack sections
+        local tmp=$(mktemp)
+        local in_overview=false
+        local in_stack=false
+        local wrote_overview=false
+        local wrote_stack=false
+        while IFS= read -r line; do
+            if [[ "$line" == "## Overview"* ]]; then
+                echo "$line" >> "$tmp"
+                printf '%b' "$notes" >> "$tmp"
+                in_overview=true
+                wrote_overview=true
+                continue
+            fi
+            if [[ "$line" == "## Stack"* ]]; then
+                echo "$line" >> "$tmp"
+                if [ ${#stack[@]} -gt 0 ]; then
+                    echo "$(printf '%s\n' "${stack[@]}" | paste -sd', ' - | sed 's/,/, /g')" >> "$tmp"
+                fi
+                in_stack=true
+                wrote_stack=true
+                continue
+            fi
+            if [[ "$line" == "## "* ]]; then
+                in_overview=false
+                in_stack=false
+            fi
+            if [ "$in_overview" = true ] || [ "$in_stack" = true ]; then
+                continue  # skip placeholder content
+            fi
+            echo "$line" >> "$tmp"
+        done < "$context_file"
+        mv "$tmp" "$context_file"
+        faint "  ✓ CONTEXT.md — stack & structure detected"
     else
-        faint "  ⊘ Notes.md — already has content, skipped"
+        faint "  ⊘ CONTEXT.md — already has content, skipped"
     fi
 
-    # --- Changelog.md: seed from git log ---
+    # --- LOG.md: seed from git log ---
     if [ -d "$project_root/.git" ]; then
-        local changelog="$project_dir/Changelog.md"
-        if ! grep -q "^## " "$changelog" 2>/dev/null; then
+        local log_file="$project_dir/LOG.md"
+        # Only seed if LOG.md just has the scaffold entry
+        if grep -q "^- Project scaffolded$" "$log_file" 2>/dev/null; then
             local log_content=""
-            log_content+="Timestamped log of changes and updates.\n\n"
+            log_content+="# Log\n\n"
 
-            # Group recent commits by date (last 30)
             local current_date=""
             while IFS='|' read -r date msg; do
                 [ -z "$date" ] && continue
                 if [ "$date" != "$current_date" ]; then
                     current_date="$date"
-                    log_content+="\n## $date\n\n"
+                    log_content+="\n## $date\n"
                 fi
                 log_content+="- $msg\n"
             done < <(cd "$project_root" && git log --format='%as|%s' -30 2>/dev/null)
 
             if [ -n "$current_date" ]; then
-                printf '%b' "$log_content" > "$changelog"
-                faint "  ✓ Changelog.md — seeded from git history"
+                printf '%b' "$log_content" > "$log_file"
+                faint "  ✓ LOG.md — seeded from git history"
             fi
         else
-            faint "  ⊘ Changelog.md — already has entries, skipped"
+            faint "  ⊘ LOG.md — already has entries, skipped"
         fi
     fi
 
-    # --- Todos.md: scan for TODO/FIXME comments ---
-    local todo_file="$project_dir/Todos.md"
-    if grep -q "Review project and add initial notes" "$todo_file" 2>/dev/null; then
+    # --- PLAN.md: scan for TODO/FIXME comments ---
+    local plan_file="$project_dir/PLAN.md"
+    if grep -q "Review project and add initial notes" "$plan_file" 2>/dev/null; then
         local todos=""
         local count=0
 
-        # Search for TODO/FIXME in source files (limit to 20)
         while IFS=: read -r file line content; do
             [ -z "$content" ] && continue
-            # Skip minified/long lines
             [ ${#content} -gt 200 ] && continue
-            # Clean up the content
             local clean=$(echo "$content" | sed -E 's/^[[:space:]]*[\/\*#-]+ *//; s/[[:space:]]*\*\/$//' | head -c 120)
             local relfile="${file#$project_root/}"
             todos+="- [ ] $clean (\`$relfile:$line\`)\n"
@@ -314,45 +332,24 @@ cmd_init() {
             --exclude='*.lock' --exclude='*.chunk.*' 2>/dev/null || true)
 
         if [ $count -gt 0 ]; then
-            printf '%b' "$todos" > "$todo_file"
-            faint "  ✓ Todos.md — found $count TODO/FIXME comments"
+            # Replace the placeholder todo with found TODOs
+            local tmp=$(mktemp)
+            local replaced=false
+            while IFS= read -r line; do
+                if [ "$replaced" = false ] && [[ "$line" == *"Review project and add initial notes"* ]]; then
+                    printf '%b' "$todos" >> "$tmp"
+                    replaced=true
+                else
+                    echo "$line" >> "$tmp"
+                fi
+            done < "$plan_file"
+            mv "$tmp" "$plan_file"
+            faint "  ✓ PLAN.md — found $count TODO/FIXME comments"
         else
-            echo "- [ ] Review project and add initial notes" > "$todo_file"
-            faint "  ⊘ Todos.md — no TODOs found in source"
+            faint "  ⊘ PLAN.md — no TODOs found in source"
         fi
     else
-        faint "  ⊘ Todos.md — already has content, skipped"
-    fi
-
-    # --- Context Map.md: detect docs & integrations ---
-    local context_map="$project_dir/Context Map.md"
-    if ! grep -q '|.*|.*|' "$context_map" 2>/dev/null || \
-       [ "$(grep -c '|.*|.*|' "$context_map" 2>/dev/null)" -le 2 ]; then
-        local map=""
-        map+="When working on files matching these paths, read the linked doc for context.\n\n"
-        map+="| Path Pattern | Read |\n"
-        map+="|-------------|------|\n"
-
-        # Detect docs directory
-        if [ -d "$project_root/docs" ]; then
-            for doc in "$project_root"/docs/*.md; do
-                [ -f "$doc" ] || continue
-                local docname=$(basename "$doc" .md)
-                local slug=$(echo "$docname" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g')
-                map+="| \`docs/$docname.md\` | Related integration docs |\n"
-            done
-        fi
-
-        # Detect CLAUDE.md
-        [ -f "$project_root/CLAUDE.md" ] && map+="| \`CLAUDE.md\` | Project-level AI instructions |\n"
-
-        # Detect README
-        [ -f "$project_root/README.md" ] && map+="| \`README.md\` | Project README |\n"
-
-        printf '%b' "$map" > "$context_map"
-        faint "  ✓ Context Map.md — mapped detected docs"
-    else
-        faint "  ⊘ Context Map.md — already has mappings, skipped"
+        faint "  ⊘ PLAN.md — already has content, skipped"
     fi
 
     # --- Copy project skills to vault ---
@@ -402,15 +399,15 @@ cmd_init() {
     fi
 
     if [ -z "$ai_bin" ]; then
-        faint "  Tip: install Claude Code or Codex to auto-generate richer Notes & Context Map"
+        faint "  Tip: install Claude Code or Codex to auto-generate richer CONTEXT.md"
         return
     fi
 
     echo ""
     if command -v gum &>/dev/null; then
-        gum confirm "Let $ai_label analyse the project for richer Notes & Context Map?" || return
+        gum confirm "Let $ai_label analyse the project for a richer CONTEXT.md?" || return
     else
-        read -p "Let $ai_label analyse the project for richer Notes & Context Map? [y/N] " -n 1 -r
+        read -p "Let $ai_label analyse the project for a richer CONTEXT.md? [y/N] " -n 1 -r
         echo ""
         [[ ! $REPLY =~ ^[Yy]$ ]] && return
     fi
@@ -422,19 +419,30 @@ cmd_init() {
 
     local analysis_prompt="You are initialising a Knap project vault for \"$project_name\".
 The project source is at: $project_root
-The vault files are at: $project_dir
+The vault file is at: $project_dir/CONTEXT.md
 
-Your job is to read the codebase and write two files. Be concise and useful -- these files are read by AI sessions to understand the project quickly.
+Read the codebase and rewrite CONTEXT.md. Be concise and useful -- this file is read by AI sessions to understand the project quickly.
 
-1. Notes.md ($project_dir/Notes.md)
+Use this structure (keep the exact headers):
 
-Write a project overview covering: what the project does (one paragraph), tech stack with versions where available, key directories and what they contain, important architectural decisions or patterns, any integrations with external services, and how to run the project locally (dev server, build commands). Keep it under 60 lines. Use markdown headers. No fluff.
+# $project_name
 
-2. Context Map.md ($project_dir/Context Map.md)
+## Overview
+What the project does (one paragraph).
 
-Build a markdown table mapping file path patterns to documentation or context that would help understand them. Format: | Path Pattern | Read | with backtick-wrapped paths. Look for API integrations and their docs (check docs/ folder, README, CLAUDE.md), complex subsystems that need explanation, config files that control important behaviour, and test directories and what they cover. Only include paths that genuinely need context -- do not map obvious things.
+## Stack
+Framework, language, versions, hosting, how to run locally.
 
-Write both files now. Overwrite whatever is there."
+## Key Files
+Important file paths and what they do. Focus on non-obvious ones.
+
+## Decisions
+Architectural decisions and patterns worth knowing. Only include things that would surprise someone new to the codebase.
+
+## Gotchas
+Things that will trip you up. Real gotchas from the code, not generic advice.
+
+Keep it under 80 lines total. No fluff. Write the file now."
 
     cd "$project_root"
 
@@ -477,8 +485,7 @@ Write both files now. Overwrite whatever is there."
         rm -f "$tmp_output"
         echo ""
         success "✓ $ai_label analysis complete"
-        faint "  Review: $project_dir/Notes.md"
-        faint "  Review: $project_dir/Context Map.md"
+        faint "  Review: $project_dir/CONTEXT.md"
     else
         rm -f "$tmp_output"
         echo ""
@@ -683,79 +690,89 @@ migrate_project() {
     local name="$2"
     local today=$(date +%Y-%m-%d)
 
-    # Skip if already migrated
-    if [ -f "$dir/STATUS.md" ]; then
+    # Skip if already migrated (has CONTEXT.md with Overview section)
+    if [ -f "$dir/CONTEXT.md" ] && grep -q "^## Overview" "$dir/CONTEXT.md" 2>/dev/null; then
         faint "  ⊘ $name — already migrated"
         return
     fi
 
     msg "  → Migrating $name"
 
-    # Notes.md → STATUS.md
+    # Build CONTEXT.md from Notes.md, Context Map.md, STATUS.md
+    local ctx=""
+    ctx+="# $name\n\n"
+
+    # Pull overview from Notes.md or STATUS.md
     if [ -f "$dir/Notes.md" ]; then
-        local notes_content=$(cat "$dir/Notes.md")
-        cat > "$dir/STATUS.md" << EOF
-# $name
-
-## Overview
-$notes_content
-
-## Current State
-- [x] In active development
-- [ ] In maintenance mode
-- [ ] Paused / on hold
-- [ ] Archived
-
-## Last Updated
-$today
-
-## Key Decisions
-
-## Known Issues
-EOF
+        ctx+="## Overview\n$(cat "$dir/Notes.md")\n\n"
         mv "$dir/Notes.md" "$dir/Notes.old.md"
-    else
-        cat > "$dir/STATUS.md" << EOF
-# $name
-
-## Overview
-(Needs overview)
-
-## Current State
-- [x] In active development
-- [ ] In maintenance mode
-- [ ] Paused / on hold
-- [ ] Archived
-
-## Last Updated
-$today
-EOF
+    elif [ -f "$dir/STATUS.md" ]; then
+        # Extract overview section from STATUS.md
+        local overview
+        overview=$(sed -n '/^## Overview/,/^## /{ /^## Overview/d; /^## [^O]/d; p; }' "$dir/STATUS.md" 2>/dev/null)
+        [ -n "$overview" ] && ctx+="## Overview\n$overview\n\n"
     fi
+
+    ctx+="## Stack\n(Framework, language, versions, hosting)\n\n"
+    ctx+="## Key Files\n(Important file paths and what they do)\n\n"
+
+    # Pull decisions from STATUS.md if present
+    if [ -f "$dir/STATUS.md" ]; then
+        local decisions
+        decisions=$(sed -n '/^## Key Decisions/,/^## /{ /^## /d; p; }' "$dir/STATUS.md" 2>/dev/null)
+        if [ -n "$decisions" ] && ! echo "$decisions" | grep -q "^(Record"; then
+            ctx+="## Decisions\n$decisions\n\n"
+        else
+            ctx+="## Decisions\n\n"
+        fi
+    else
+        ctx+="## Decisions\n\n"
+    fi
+
+    ctx+="## Gotchas\n\n"
+
+    # Merge Context Map.md content if present
+    if [ -f "$dir/Context Map.md" ]; then
+        ctx+="\n## Context Map\n$(cat "$dir/Context Map.md")\n"
+        mv "$dir/Context Map.md" "$dir/Context Map.old.md"
+    fi
+
+    # Merge existing CONTEXT.md content if it has useful stuff
+    if [ -f "$dir/CONTEXT.md" ]; then
+        local existing
+        existing=$(cat "$dir/CONTEXT.md")
+        if ! echo "$existing" | grep -q "^(Framework, language"; then
+            ctx+="\n---\n## Previous Context\n$existing\n"
+        fi
+        mv "$dir/CONTEXT.md" "$dir/CONTEXT.old.md"
+    fi
+
+    printf '%b' "$ctx" > "$dir/CONTEXT.md"
+
+    # Remove STATUS.md (content absorbed into CONTEXT.md)
+    [ -f "$dir/STATUS.md" ] && mv "$dir/STATUS.md" "$dir/STATUS.old.md"
 
     # Todos.md → PLAN.md
     if [ -f "$dir/Todos.md" ]; then
         local todos_content=$(cat "$dir/Todos.md")
-        # Check if it already has section headers
         if grep -q '^## ' "$dir/Todos.md"; then
-            # Has sections — use as-is but rename
             cat > "$dir/PLAN.md" << EOF
 # Plan
 
 $todos_content
 EOF
         else
-            # No sections — wrap in Now
             cat > "$dir/PLAN.md" << EOF
 # Plan
 
-## Now (Active Sprint / Current Focus)
+## Now
 $todos_content
 
-## Next (Queued, not started)
+## Next
 
-## Later (Backlog, low priority)
+## Later
 
-## Done (Recently Completed)
+## Done
 EOF
         fi
         mv "$dir/Todos.md" "$dir/Todos.old.md"
@@ -781,17 +798,6 @@ $log_content"
 
 $log_content
 EOF
-    fi
-
-    # Context Map.md → CONTEXT.md
-    if [ -f "$dir/Context Map.md" ]; then
-        local ctx_content=$(cat "$dir/Context Map.md")
-        cat > "$dir/CONTEXT.md" << EOF
-# Context
-
-$ctx_content
-EOF
-        mv "$dir/Context Map.md" "$dir/Context Map.old.md"
     fi
 
     success "  ✓ $name migrated"
@@ -1237,12 +1243,14 @@ EOF
 cmd_note() {
     local text=""
     local explicit_project=""
+    local section="Decisions"
 
     # Parse flags
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -p) shift; explicit_project="$1"; shift ;;
-            *)  text="$text $1"; shift ;;
+            -p)       shift; explicit_project="$1"; shift ;;
+            --gotcha) section="Gotchas"; shift ;;
+            *)        text="$text $1"; shift ;;
         esac
     done
     text="${text# }"
@@ -1260,33 +1268,33 @@ cmd_note() {
 
     [ -z "$text" ] && return
 
-    local status_file="$RESOLVED_PROJECT_DIR/STATUS.md"
+    local context_file="$RESOLVED_PROJECT_DIR/CONTEXT.md"
 
-    if [ ! -f "$status_file" ]; then
-        warn "No STATUS.md found for $RESOLVED_PROJECT_NAME"
+    if [ ! -f "$context_file" ]; then
+        warn "No CONTEXT.md found for $RESOLVED_PROJECT_NAME"
         return
     fi
 
-    # Append under Known Issues section, or at end of file
-    if grep -q "^## Known Issues" "$status_file"; then
+    # Append under the target section, or at end of file
+    if grep -q "^## $section" "$context_file"; then
         local tmp=$(mktemp)
         local inserted=false
         while IFS= read -r line; do
             echo "$line" >> "$tmp"
-            if [ "$inserted" = false ] && [[ "$line" == "## Known Issues"* ]]; then
+            if [ "$inserted" = false ] && [[ "$line" == "## $section"* ]]; then
                 echo "- $text" >> "$tmp"
                 inserted=true
             fi
-        done < "$status_file"
-        mv "$tmp" "$status_file"
+        done < "$context_file"
+        mv "$tmp" "$context_file"
     else
-        echo "" >> "$status_file"
-        echo "## Notes" >> "$status_file"
-        echo "- $text" >> "$status_file"
+        echo "" >> "$context_file"
+        echo "## $section" >> "$context_file"
+        echo "- $text" >> "$context_file"
     fi
 
-    success "✓ Noted: $text"
-    faint "  $RESOLVED_PROJECT_NAME/STATUS.md"
+    success "✓ Noted in $section: $text"
+    faint "  $RESOLVED_PROJECT_NAME/CONTEXT.md"
 }
 
 cmd_review() {
@@ -1466,12 +1474,6 @@ cmd_review() {
         fi
 
         success "  ✓ Logged to $RESOLVED_PROJECT_NAME/LOG.md"
-    fi
-
-    # --- Step 4: Update last updated in STATUS.md ---
-    local status_file="$RESOLVED_PROJECT_DIR/STATUS.md"
-    if [ -f "$status_file" ]; then
-        sed -i'' -e "s/^## Last Updated.*/## Last Updated\n$today/" "$status_file"
     fi
 
     echo ""

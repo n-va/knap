@@ -12,18 +12,17 @@ description: >-
 
 # Knap — Project Knowledge CLI
 
-Knap tracks project status, plans, and logs in markdown files. The developer drives updates via CLI commands; AI sessions read the files for context.
+Knap tracks project context, plans, and logs in markdown. The developer drives updates via CLI; AI sessions read the files for context.
 
 ## Vault Structure
 
-Each project lives at `Projects/<Name>/` in the vault with four files:
+Each project lives at `Projects/<Name>/` with three files:
 
-| File | Purpose |
-|---|---|
-| `STATUS.md` | What the project is, key decisions, known issues |
-| `PLAN.md` | TODOs in Now/Next/Later/Done sections |
-| `LOG.md` | Changelog entries grouped by date |
-| `CONTEXT.md` | Tech stack, key files, conventions, gotchas |
+| File | What it answers | Changes |
+|---|---|---|
+| `CONTEXT.md` | What is this project? Stack, decisions, gotchas | Rarely |
+| `PLAN.md` | What needs doing? Now/Next/Later/Done | Every session |
+| `LOG.md` | What happened? Entries by date | Every session |
 
 ## Commands
 
@@ -32,59 +31,43 @@ All commands auto-detect the project from cwd. Use `-p <Name>` to target a speci
 ### Capture
 
 ```bash
-# Add a TODO (defaults to Now section)
-knap todo "Implement search endpoint"
-knap todo --next "Add pagination"
-knap todo --later "Performance audit"
-
-# Mark TODOs complete (interactive picker)
-knap done
-
-# Log what happened
-knap log "Refactored auth to use Sanctum"
-
-# Capture a note/decision/issue
-knap note "Using Redis for session storage — Memcached too limited"
+knap todo "Implement search endpoint"          # Add to Now
+knap todo --next "Add pagination"              # Add to Next
+knap todo --later "Performance audit"          # Add to Later
+knap done                                      # Interactive: mark TODOs complete
+knap log "Refactored auth to use Sanctum"      # Changelog entry under today
+knap note "Using Redis — Memcached too limited" # Decision in CONTEXT.md
+knap note --gotcha "Cron needs --force on prod" # Gotcha in CONTEXT.md
 ```
 
 ### Session Flow
 
 ```bash
-# End-of-session review: mark done → add new todos → write log
-knap review
-
-# Pre-deploy: shows remaining todos → review → sync vault
-knap ship
+knap review    # End-of-session: mark done → add new todos → write log
+knap ship      # Pre-deploy: shows open todos → review → sync vault
 ```
 
 ### Scaffolding
 
 ```bash
-# Scaffold from cwd (detects stack, seeds from git log)
-knap init
-
-# Scaffold empty project by name
-knap project MyApp
-
-# Sync vault to git
-knap sync
+knap init      # Scaffold from cwd (detects stack, seeds from git log)
+knap project MyApp   # Scaffold empty project by name
+knap sync      # Commit & push vault changes
 ```
 
 ## When to Run Commands
 
-- **After completing work**: `knap done` to mark TODOs, `knap log` to record what changed.
-- **When user asks to "ship"**: Run `knap ship` (or `knap review` then `knap sync`).
-- **When adding tasks**: `knap todo` with the right section flag.
-- **When making a decision**: `knap note` to capture the reasoning.
-- **Starting a new project**: `knap init` from the project root.
+- **After completing work**: `knap done` + `knap log`.
+- **When user says "ship"**: `knap ship`.
+- **When adding tasks**: `knap todo` with section flag.
+- **When making a decision**: `knap note` to record reasoning.
+- **When hitting a gotcha**: `knap note --gotcha`.
+- **New project**: `knap init` from the project root.
 
 ## Reading Project Context
 
-When working on a project, read its vault files for context — don't load all of them upfront:
+Read vault files on-demand — don't load all upfront:
 
-- **Starting work**: Read `PLAN.md` to see what's open.
-- **Need project background**: Read `STATUS.md`.
-- **Need technical details**: Read `CONTEXT.md`.
-- **Need recent history**: Read `LOG.md`.
-
-The vault path is resolved from the `knap` binary location (the vault is the repo root containing the `knap` script).
+- **Starting work** → `PLAN.md` (what's open)
+- **Need background** → `CONTEXT.md` (stack, decisions, gotchas)
+- **Need recent history** → `LOG.md` (what changed recently)
