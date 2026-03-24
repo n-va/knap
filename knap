@@ -3,6 +3,8 @@
 #
 # github.com/n-va/knap
 
+KNAP_VERSION="1.1.0"
+
 set -e
 
 # Resolve real path through symlinks to find the vault
@@ -564,7 +566,10 @@ cmd_update() {
     cp "$tmp_knap" "$VAULT_DIR/knap"
     chmod +x "$VAULT_DIR/knap"
     rm -f "$tmp_knap"
-    faint "  ✓ CLI updated"
+    # Show new version from downloaded CLI
+    local new_version
+    new_version=$(grep '^KNAP_VERSION=' "$VAULT_DIR/knap" 2>/dev/null | cut -d'"' -f2)
+    faint "  ✓ CLI updated to v${new_version:-unknown}"
 
     # Download latest install.sh and run in update mode
     local tmp_installer=$(mktemp)
@@ -881,7 +886,12 @@ cmd_help() {
     echo "  knap enable           Enable knap hooks in Claude Code"
     echo "  knap disable          Disable knap hooks in Claude Code"
     echo "  knap help             Show this help"
+    echo "  knap version          Show version"
     echo ""
+}
+
+cmd_version() {
+    echo "knap $KNAP_VERSION"
 }
 
 # --- Dispatch ---
@@ -897,6 +907,7 @@ case "${1:-}" in
     status)   cmd_status ;;
     enable)   cmd_enable ;;
     disable)  cmd_disable ;;
+    version|-v|--version)  cmd_version ;;
     help)     cmd_help ;;
     *)        cmd_help ;;
 esac
