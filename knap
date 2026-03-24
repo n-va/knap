@@ -736,16 +736,11 @@ tidy_project() {
         changes=$((changes + 1))
     fi
 
-    # Rename old-format files
-    local -A renames=(
-        ["Notes.md"]="context.md"
-        ["Todos.md"]="plan.md"
-        ["Changelog.md"]="log.md"
-        ["Context Map.md"]="context.md"
-        ["Last Session.md"]="log.md"
-    )
-    for old_name in "${!renames[@]}"; do
-        local new_name="${renames[$old_name]}"
+    # Rename old-format files (bash 3.2 compatible — no associative arrays)
+    local old_files="Notes.md:context.md Todos.md:plan.md Changelog.md:log.md"
+    for pair in $old_files; do
+        local old_name="${pair%%:*}"
+        local new_name="${pair##*:}"
         if [ -f "$dir/$old_name" ] && [ ! -f "$dir/$new_name" ]; then
             mv "$dir/$old_name" "$dir/$new_name"
             faint "  ✓ $name: $old_name → $new_name"
@@ -753,6 +748,21 @@ tidy_project() {
         elif [ -f "$dir/$old_name" ] && [ -f "$dir/$new_name" ]; then
             mv "$dir/$old_name" "$dir/${old_name%.md}.old.md"
             faint "  ✓ $name: $old_name → ${old_name%.md}.old.md (kept $new_name)"
+            changes=$((changes + 1))
+        fi
+    done
+    # Handle space-in-name files separately
+    for pair in "Context Map.md:context.md" "Last Session.md:log.md"; do
+        local old_name="${pair%%:*}"
+        local new_name="${pair##*:}"
+        if [ -f "$dir/$old_name" ] && [ ! -f "$dir/$new_name" ]; then
+            mv "$dir/$old_name" "$dir/$new_name"
+            faint "  ✓ $name: $old_name → $new_name"
+            changes=$((changes + 1))
+        elif [ -f "$dir/$old_name" ] && [ -f "$dir/$new_name" ]; then
+            local old_base="${old_name%.md}"
+            mv "$dir/$old_name" "$dir/${old_base}.old.md"
+            faint "  ✓ $name: $old_name → ${old_base}.old.md (kept $new_name)"
             changes=$((changes + 1))
         fi
     done
