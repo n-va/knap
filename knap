@@ -3,7 +3,7 @@
 #
 # github.com/n-va/knap
 
-KNAP_VERSION="1.3.0"
+KNAP_VERSION="1.3.1"
 
 set -e
 
