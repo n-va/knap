@@ -20,9 +20,9 @@ Each project lives at `Projects/<Name>/` with three files:
 
 | File | What it answers | Changes |
 |---|---|---|
-| `CONTEXT.md` | What is this project? Stack, decisions, gotchas | Rarely |
-| `PLAN.md` | What needs doing? Now/Next/Later/Done | Every session |
-| `LOG.md` | What happened? Entries by date | Every session |
+| `context.md` | What is this project? Stack, decisions, gotchas | Rarely |
+| `plan.md` | What needs doing? Now/Next/Later/Done | Every session |
+| `log.md` | What happened? Entries by date | Every session |
 
 ## Commands
 
@@ -36,8 +36,8 @@ knap todo --next "Add pagination"              # Add to Next
 knap todo --later "Performance audit"          # Add to Later
 knap done                                      # Interactive: mark TODOs complete
 knap log "Refactored auth to use Sanctum"      # Changelog entry under today
-knap note "Using Redis — Memcached too limited" # Decision in CONTEXT.md
-knap note --gotcha "Cron needs --force on prod" # Gotcha in CONTEXT.md
+knap note "Using Redis — Memcached too limited" # Decision in context.md
+knap note --gotcha "Cron needs --force on prod" # Gotcha in context.md
 ```
 
 ### Session Flow
@@ -68,6 +68,6 @@ knap sync      # Commit & push vault changes
 
 Read vault files on-demand — don't load all upfront:
 
-- **Starting work** → `PLAN.md` (what's open)
-- **Need background** → `CONTEXT.md` (stack, decisions, gotchas)
-- **Need recent history** → `LOG.md` (what changed recently)
+- **Starting work** → `plan.md` (what's open)
+- **Need background** → `context.md` (stack, decisions, gotchas)
+- **Need recent history** → `log.md` (what changed recently)
