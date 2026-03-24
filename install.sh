@@ -350,21 +350,27 @@ CRONEOF
         echo '{}' > "$SETTINGS_FILE"
     fi
 
-    jq '.hooks.UserPromptSubmit = [
-        {"matcher": "", "hooks": [
-            {"type": "command", "command": "$HOME/.claude/hooks/knap-session-start.sh", "timeout": 5}
-        ]}
-    ] | .hooks.PostToolUse = [
-        {"matcher": "Bash", "hooks": [
-            {"type": "command", "command": "$HOME/.claude/hooks/knap-post-commit.sh", "timeout": 10}
-        ]}
-    ] | .hooks.Stop = [
-        {"matcher": "", "hooks": [
-            {"type": "command", "command": "$HOME/.claude/hooks/knap-stop.sh", "timeout": 15}
-        ]}
-    ]' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+    # Skip hook registration if user has explicitly disabled them (backup file = disabled state)
+    BACKUP_FILE="$CLAUDE_DIR/knap-hooks-backup.json"
+    if [ -f "$BACKUP_FILE" ]; then
+        gum style --faint "Claude Code hooks skipped (disabled via 'knap disable')"
+    else
+        jq '.hooks.UserPromptSubmit = [
+            {"matcher": "", "hooks": [
+                {"type": "command", "command": "$HOME/.claude/hooks/knap-session-start.sh", "timeout": 5}
+            ]}
+        ] | .hooks.PostToolUse = [
+            {"matcher": "Bash", "hooks": [
+                {"type": "command", "command": "$HOME/.claude/hooks/knap-post-commit.sh", "timeout": 10}
+            ]}
+        ] | .hooks.Stop = [
+            {"matcher": "", "hooks": [
+                {"type": "command", "command": "$HOME/.claude/hooks/knap-stop.sh", "timeout": 15}
+            ]}
+        ]' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
 
-    gum style --faint "Claude Code hooks configured"
+        gum style --faint "Claude Code hooks configured"
+    fi
 
     # --- Add conventions to AI config files ---
 
