@@ -660,6 +660,161 @@ cmd_status() {
     fi
 }
 
+cmd_tidy() {
+    local explicit_project=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -p)  shift; explicit_project="$1"; shift ;;
+            --all) explicit_project="__all__"; shift ;;
+            *)   shift ;;
+        esac
+    done
+
+    local projects_dir="$VAULT_DIR/Projects"
+
+    if [ "$explicit_project" = "__all__" ]; then
+        local count=0
+        for dir in "$projects_dir"/*/; do
+            [ -d "$dir" ] || continue
+            local name=$(basename "$dir")
+            [ "$name" = "Archive" ] && continue
+            tidy_project "$dir" "$name"
+            count=$((count + 1))
+        done
+        # Also tidy archived projects
+        if [ -d "$projects_dir/Archive" ]; then
+            for dir in "$projects_dir/Archive"/*/; do
+                [ -d "$dir" ] || continue
+                local name=$(basename "$dir")
+                tidy_project "$dir" "$name"
+                count=$((count + 1))
+            done
+        fi
+        echo ""
+        success "✓ Tidied $count project(s)"
+    else
+        resolve_project "$explicit_project" || return
+        tidy_project "$RESOLVED_PROJECT_DIR" "$RESOLVED_PROJECT_NAME"
+    fi
+}
+
+tidy_project() {
+    local dir="$1"
+    local name="$2"
+    local changes=0
+
+    # Rename uppercase to lowercase
+    for old_name in "CONTEXT.md" "PLAN.md" "LOG.md" "STATUS.md"; do
+        local new_name=$(echo "$old_name" | tr '[:upper:]' '[:lower:]')
+        if [ -f "$dir/$old_name" ] && [ "$old_name" != "$new_name" ]; then
+            mv "$dir/$old_name" "$dir/$new_name"
+            faint "  ✓ $name: $old_name → $new_name"
+            changes=$((changes + 1))
+        fi
+    done
+
+    # Absorb STATUS.md / status.md into context.md if both exist
+    if [ -f "$dir/status.md" ] && [ -f "$dir/context.md" ]; then
+        # Append useful STATUS content to context.md
+        local status_content=$(cat "$dir/status.md")
+        if echo "$status_content" | grep -q "^## Known Issues"; then
+            local issues
+            issues=$(sed -n '/^## Known Issues/,/^## /{ /^## /d; p; }' "$dir/status.md" 2>/dev/null | grep -v '^(')
+            if [ -n "$issues" ]; then
+                echo "" >> "$dir/context.md"
+                echo "## Known Issues (from status.md)" >> "$dir/context.md"
+                echo "$issues" >> "$dir/context.md"
+            fi
+        fi
+        mv "$dir/status.md" "$dir/status.old.md"
+        faint "  ✓ $name: status.md absorbed into context.md"
+        changes=$((changes + 1))
+    elif [ -f "$dir/status.md" ] && [ ! -f "$dir/context.md" ]; then
+        mv "$dir/status.md" "$dir/context.md"
+        faint "  ✓ $name: status.md → context.md"
+        changes=$((changes + 1))
+    fi
+
+    # Rename old-format files
+    local -A renames=(
+        ["Notes.md"]="context.md"
+        ["Todos.md"]="plan.md"
+        ["Changelog.md"]="log.md"
+        ["Context Map.md"]="context.md"
+        ["Last Session.md"]="log.md"
+    )
+    for old_name in "${!renames[@]}"; do
+        local new_name="${renames[$old_name]}"
+        if [ -f "$dir/$old_name" ] && [ ! -f "$dir/$new_name" ]; then
+            mv "$dir/$old_name" "$dir/$new_name"
+            faint "  ✓ $name: $old_name → $new_name"
+            changes=$((changes + 1))
+        elif [ -f "$dir/$old_name" ] && [ -f "$dir/$new_name" ]; then
+            mv "$dir/$old_name" "$dir/${old_name%.md}.old.md"
+            faint "  ✓ $name: $old_name → ${old_name%.md}.old.md (kept $new_name)"
+            changes=$((changes + 1))
+        fi
+    done
+
+    # Ensure all three files exist
+    local today=$(date +%Y-%m-%d)
+
+    if [ ! -f "$dir/context.md" ]; then
+        cat > "$dir/context.md" << EOF
+# $name
+
+## Overview
+(What this project is, one paragraph)
+
+## Stack
+(Framework, language, versions, hosting)
+
+## Key Files
+(Important file paths and what they do)
+
+## Decisions
+
+## Gotchas
+EOF
+        faint "  ✓ $name: created context.md"
+        changes=$((changes + 1))
+    fi
+
+    if [ ! -f "$dir/plan.md" ]; then
+        cat > "$dir/plan.md" << 'EOF'
+# Plan
+
+## Now
+
+## Next
+
+## Later
+
+## Done
+EOF
+        faint "  ✓ $name: created plan.md"
+        changes=$((changes + 1))
+    fi
+
+    if [ ! -f "$dir/log.md" ]; then
+        cat > "$dir/log.md" << EOF
+# Log
+
+## $today
+- Project tidied
+EOF
+        faint "  ✓ $name: created log.md"
+        changes=$((changes + 1))
+    fi
+
+    if [ $changes -eq 0 ]; then
+        faint "  ⊘ $name — already tidy"
+    else
+        success "  ✓ $name — $changes change(s)"
+    fi
+}
+
 cmd_migrate() {
     local project_name="$1"
     local projects_dir="$VAULT_DIR/Projects"
@@ -1583,9 +1738,10 @@ cmd_help() {
     echo ""
     echo "  Vault:"
     echo "    knap sync             Commit & push vault changes"
+    echo "    knap tidy             Bring project up to current convention (--all for all)"
     echo "    knap open             Open project vault dir in Finder"
     echo "    knap status           Show vault info"
-    echo "    knap migrate [name]   Migrate project(s) to new convention"
+    echo "    knap migrate [name]   Legacy migration (old format → new)"
     echo ""
     echo "  Config:"
     echo "    knap enable           Enable knap hooks in Claude Code"
@@ -1616,6 +1772,7 @@ case "${1:-}" in
     review)   shift; cmd_review "$@" ;;
     ship)     shift; cmd_ship "$@" ;;
     open)     shift; cmd_open "$@" ;;
+    tidy)     shift; cmd_tidy "$@" ;;
     migrate)  cmd_migrate "$2" ;;
     sync)     cmd_sync ;;
     update)   cmd_update ;;
