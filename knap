@@ -3,7 +3,7 @@
 #
 # github.com/n-va/knap
 
-KNAP_VERSION="1.1.0"
+KNAP_VERSION="1.2.0"
 
 set -e
 
@@ -635,7 +635,17 @@ cmd_status() {
         if [ "$has_hooks" -gt 0 ]; then
             success "  Hooks: enabled"
         else
-            warn "  Hooks: disabled (run 'knap toggle' to re-enable)"
+            warn "  Hooks: disabled (run 'knap enable' to re-enable)"
+        fi
+    fi
+
+    # Conventions status
+    local claude_md="$HOME/.claude/CLAUDE.md"
+    if [ -f "$claude_md" ]; then
+        if grep -q "# Knap Conventions" "$claude_md" 2>/dev/null; then
+            success "  CLAUDE.md: conventions active"
+        else
+            warn "  CLAUDE.md: conventions removed"
         fi
     fi
 
@@ -808,33 +818,59 @@ cmd_enable() {
     local CLAUDE_DIR="$HOME/.claude"
     local SETTINGS_FILE="$CLAUDE_DIR/settings.json"
     local BACKUP_FILE="$CLAUDE_DIR/knap-hooks-backup.json"
+    local CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+    local CODEX_DIR="$HOME/.codex"
+    local AGENTS_MD="$CODEX_DIR/AGENTS.md"
+    local CONVENTIONS_BACKUP="$CLAUDE_DIR/knap-conventions-backup.md"
 
     if [ ! -f "$SETTINGS_FILE" ]; then
         warn "No Claude Code settings found at $SETTINGS_FILE"
         exit 1
     fi
 
-    if knap_hooks_active; then
-        faint "Knap hooks are already enabled"
-        return 0
+    local changed=false
+
+    # Restore hooks
+    if ! knap_hooks_active; then
+        if [ -f "$BACKUP_FILE" ]; then
+            local backup_hooks
+            backup_hooks=$(cat "$BACKUP_FILE")
+
+            jq --argjson backup "$backup_hooks" '
+                .hooks = ($backup.hooks + (.hooks // {})) |
+                .hooks.UserPromptSubmit = ([$backup.hooks.UserPromptSubmit // [], .hooks.UserPromptSubmit // []] | add | unique_by(.hooks[0].command)) |
+                .hooks.PostToolUse = ([$backup.hooks.PostToolUse // [], .hooks.PostToolUse // []] | add | unique_by(.hooks[0].command)) |
+                .hooks.Stop = ([$backup.hooks.Stop // [], .hooks.Stop // []] | add | unique_by(.hooks[0].command))
+            ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+            rm -f "$BACKUP_FILE"
+
+            faint "  Hooks restored"
+            changed=true
+        else
+            warn "No hook backup found. Run 'knap update' to reinstall hooks."
+        fi
     fi
 
-    if [ -f "$BACKUP_FILE" ]; then
-        local backup_hooks
-        backup_hooks=$(cat "$BACKUP_FILE")
+    # Restore conventions in CLAUDE.md / AGENTS.md
+    if [ -f "$CONVENTIONS_BACKUP" ]; then
+        local conventions
+        conventions=$(cat "$CONVENTIONS_BACKUP")
 
-        jq --argjson backup "$backup_hooks" '
-            .hooks = ($backup.hooks + (.hooks // {})) |
-            .hooks.UserPromptSubmit = ([$backup.hooks.UserPromptSubmit // [], .hooks.UserPromptSubmit // []] | add | unique_by(.hooks[0].command)) |
-            .hooks.PostToolUse = ([$backup.hooks.PostToolUse // [], .hooks.PostToolUse // []] | add | unique_by(.hooks[0].command)) |
-            .hooks.Stop = ([$backup.hooks.Stop // [], .hooks.Stop // []] | add | unique_by(.hooks[0].command))
-        ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+        for md_file in "$CLAUDE_MD" "$AGENTS_MD"; do
+            if [ -f "$md_file" ] && ! grep -q "# Knap Conventions" "$md_file" 2>/dev/null; then
+                printf "
+%s" "$conventions" >> "$md_file"
+                faint "  Conventions restored in $(basename "$md_file")"
+            fi
+        done
+        rm -f "$CONVENTIONS_BACKUP"
+        changed=true
+    fi
 
-        success "✓ Knap hooks enabled"
+    if [ "$changed" = true ]; then
+        success "✓ Knap enabled"
     else
-        warn "No hook backup found. Run the installer to set up hooks:"
-        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/n-va/knap/main/install.sh)"
-        exit 1
+        faint "Knap is already enabled"
     fi
 }
 
@@ -842,33 +878,58 @@ cmd_disable() {
     local CLAUDE_DIR="$HOME/.claude"
     local SETTINGS_FILE="$CLAUDE_DIR/settings.json"
     local BACKUP_FILE="$CLAUDE_DIR/knap-hooks-backup.json"
+    local CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+    local CODEX_DIR="$HOME/.codex"
+    local AGENTS_MD="$CODEX_DIR/AGENTS.md"
+    local CONVENTIONS_BACKUP="$CLAUDE_DIR/knap-conventions-backup.md"
 
     if [ ! -f "$SETTINGS_FILE" ]; then
         warn "No Claude Code settings found at $SETTINGS_FILE"
         exit 1
     fi
 
-    if ! knap_hooks_active; then
-        faint "Knap hooks are already disabled"
-        return 0
+    local changed=false
+
+    # Disable hooks
+    if knap_hooks_active; then
+        jq '{hooks: .hooks}' "$SETTINGS_FILE" > "$BACKUP_FILE"
+
+        jq '
+            .hooks.UserPromptSubmit = ([.hooks.UserPromptSubmit // [] | .[] | select(.hooks | all(.command | test("knap") | not))]) |
+            .hooks.PostToolUse = ([.hooks.PostToolUse // [] | .[] | select(.hooks | all(.command | test("knap") | not))]) |
+            .hooks.Stop = ([.hooks.Stop // [] | .[] | select(.hooks | all(.command | test("knap") | not))]) |
+            if .hooks.UserPromptSubmit == [] then del(.hooks.UserPromptSubmit) else . end |
+            if .hooks.PostToolUse == [] then del(.hooks.PostToolUse) else . end |
+            if .hooks.Stop == [] then del(.hooks.Stop) else . end |
+            if .hooks == {} then del(.hooks) else . end
+        ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+
+        faint "  Hooks removed"
+        changed=true
     fi
 
-    # Back up the hooks config
-    jq '{hooks: .hooks}' "$SETTINGS_FILE" > "$BACKUP_FILE"
+    # Remove conventions from CLAUDE.md / AGENTS.md
+    for md_file in "$CLAUDE_MD" "$AGENTS_MD"; do
+        if [ -f "$md_file" ] && grep -q "# Knap Conventions" "$md_file" 2>/dev/null; then
+            # Back up the conventions block (first time only)
+            if [ ! -f "$CONVENTIONS_BACKUP" ]; then
+                sed -n '/^# Knap Conventions$/,$p' "$md_file" > "$CONVENTIONS_BACKUP"
+            fi
 
-    # Remove all knap hooks
-    jq '
-        .hooks.UserPromptSubmit = ([.hooks.UserPromptSubmit // [] | .[] | select(.hooks | all(.command | test("knap") | not))]) |
-        .hooks.PostToolUse = ([.hooks.PostToolUse // [] | .[] | select(.hooks | all(.command | test("knap") | not))]) |
-        .hooks.Stop = ([.hooks.Stop // [] | .[] | select(.hooks | all(.command | test("knap") | not))]) |
-        if .hooks.UserPromptSubmit == [] then del(.hooks.UserPromptSubmit) else . end |
-        if .hooks.PostToolUse == [] then del(.hooks.PostToolUse) else . end |
-        if .hooks.Stop == [] then del(.hooks.Stop) else . end |
-        if .hooks == {} then del(.hooks) else . end
-    ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+            # Remove everything from "# Knap Conventions" to end of file
+            sed '/^# Knap Conventions$/,$d' "$md_file" > "${md_file}.tmp" && mv "${md_file}.tmp" "$md_file"
 
-    success "✓ Knap hooks disabled"
-    faint "Run 'knap enable' to re-enable"
+            faint "  Conventions removed from $(basename "$md_file")"
+            changed=true
+        fi
+    done
+
+    if [ "$changed" = true ]; then
+        success "✓ Knap disabled"
+        faint "Run 'knap enable' to re-enable"
+    else
+        faint "Knap is already disabled"
+    fi
 }
 
 cmd_help() {
