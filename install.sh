@@ -422,24 +422,30 @@ $MARKER
 CONVENTIONS
     }
 
-    # Write to CLAUDE.md
-    if [ "$AI_TOOL" = "claude" ] || [ "$AI_TOOL" = "both" ]; then
-        if [ -f "$CLAUDE_MD" ] && grep -q "$MARKER" "$CLAUDE_MD"; then
-            gum style --faint "Knap conventions already in CLAUDE.md (kept existing)"
-        else
-            write_knap_conventions "$CLAUDE_MD"
-            gum style --faint "Knap conventions added to CLAUDE.md"
+    # Skip conventions if user has explicitly disabled them
+    CONVENTIONS_BACKUP="$CLAUDE_DIR/knap-conventions-backup.md"
+    if [ -f "$CONVENTIONS_BACKUP" ]; then
+        gum style --faint "Conventions skipped (disabled via 'knap disable')"
+    else
+        # Write to CLAUDE.md
+        if [ "$AI_TOOL" = "claude" ] || [ "$AI_TOOL" = "both" ]; then
+            if [ -f "$CLAUDE_MD" ] && grep -q "$MARKER" "$CLAUDE_MD"; then
+                gum style --faint "Knap conventions already in CLAUDE.md (kept existing)"
+            else
+                write_knap_conventions "$CLAUDE_MD"
+                gum style --faint "Knap conventions added to CLAUDE.md"
+            fi
         fi
-    fi
 
-    # Write to AGENTS.md (Codex)
-    if [ "$AI_TOOL" = "codex" ] || [ "$AI_TOOL" = "both" ]; then
-        mkdir -p "$CODEX_DIR"
-        if [ -f "$AGENTS_MD" ] && grep -q "$MARKER" "$AGENTS_MD"; then
-            gum style --faint "Knap conventions already in AGENTS.md (kept existing)"
-        else
-            write_knap_conventions "$AGENTS_MD"
-            gum style --faint "Knap conventions added to AGENTS.md"
+        # Write to AGENTS.md (Codex)
+        if [ "$AI_TOOL" = "codex" ] || [ "$AI_TOOL" = "both" ]; then
+            mkdir -p "$CODEX_DIR"
+            if [ -f "$AGENTS_MD" ] && grep -q "$MARKER" "$AGENTS_MD"; then
+                gum style --faint "Knap conventions already in AGENTS.md (kept existing)"
+            else
+                write_knap_conventions "$AGENTS_MD"
+                gum style --faint "Knap conventions added to AGENTS.md"
+            fi
         fi
     fi
 

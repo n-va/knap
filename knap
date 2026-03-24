@@ -3,7 +3,7 @@
 #
 # github.com/n-va/knap
 
-KNAP_VERSION="1.2.0"
+KNAP_VERSION="1.2.1"
 
 set -e
 
@@ -563,13 +563,21 @@ cmd_update() {
         rm -f "$tmp_knap"
         exit 1
     }
-    cp "$tmp_knap" "$VAULT_DIR/knap"
-    chmod +x "$VAULT_DIR/knap"
-    rm -f "$tmp_knap"
-    # Show new version from downloaded CLI
+
+    # Check if there's actually an update
     local new_version
-    new_version=$(grep '^KNAP_VERSION=' "$VAULT_DIR/knap" 2>/dev/null | cut -d'"' -f2)
-    faint "  ✓ CLI updated to v${new_version:-unknown}"
+    new_version=$(grep '^KNAP_VERSION=' "$tmp_knap" 2>/dev/null | cut -d'"' -f2)
+    local current_version="$KNAP_VERSION"
+
+    if [ "$new_version" = "$current_version" ]; then
+        faint "  Already on latest (v${current_version})"
+        rm -f "$tmp_knap"
+    else
+        cp "$tmp_knap" "$VAULT_DIR/knap"
+        chmod +x "$VAULT_DIR/knap"
+        rm -f "$tmp_knap"
+        success "  ✓ CLI updated: v${current_version} → v${new_version}"
+    fi
 
     # Download latest install.sh and run in update mode
     local tmp_installer=$(mktemp)
