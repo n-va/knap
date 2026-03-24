@@ -80,7 +80,7 @@ cmd_project() {
 
     local today=$(date +%Y-%m-%d)
 
-    cat > "$project_dir/context.md" << EOF
+    cat > "$project_dir/Context.md" << EOF
 # $name
 
 ## Overview
@@ -99,7 +99,7 @@ cmd_project() {
 (Things that will trip you up)
 EOF
 
-    cat > "$project_dir/plan.md" << 'EOF'
+    cat > "$project_dir/Plan.md" << 'EOF'
 # Plan
 
 ## Now
@@ -112,7 +112,7 @@ EOF
 ## Done
 EOF
 
-    cat > "$project_dir/log.md" << EOF
+    cat > "$project_dir/Log.md" << EOF
 # Log
 
 ## $today
@@ -121,7 +121,7 @@ EOF
 
     success "✓ Scaffolded project: $name"
     faint "  $project_dir/"
-    faint "  Files: context.md, plan.md, log.md"
+    faint "  Files: Context.md, Plan.md, Log.md"
 }
 
 cmd_projects() {
@@ -135,8 +135,8 @@ cmd_projects() {
     for dir in "$projects_dir"/*/; do
         [ -d "$dir" ] || continue
         local name=$(basename "$dir")
-        # Support both old (Todos.md) and new (plan.md) conventions
-        local plan_file="$dir/plan.md"
+        # Support both old (Todos.md) and new (Plan.md) conventions
+        local plan_file="$dir/Plan.md"
         [ ! -f "$plan_file" ] && plan_file="$dir/Todos.md"
         local todos=$(grep -c '^\- \[ \]' "$plan_file" 2>/dev/null || true)
         local done=$(grep -c '^\- \[x\]' "$plan_file" 2>/dev/null || true)
@@ -239,8 +239,8 @@ cmd_init() {
     done
     notes+='```\n'
 
-    # Enrich context.md with detected stack & structure
-    local context_file="$project_dir/context.md"
+    # Enrich Context.md with detected stack & structure
+    local context_file="$project_dir/Context.md"
     if grep -q "(What this project is" "$context_file" 2>/dev/null; then
         # Still has placeholder — replace the Overview and Stack sections
         local tmp=$(mktemp)
@@ -275,15 +275,15 @@ cmd_init() {
             echo "$line" >> "$tmp"
         done < "$context_file"
         mv "$tmp" "$context_file"
-        faint "  ✓ context.md — stack & structure detected"
+        faint "  ✓ Context.md — stack & structure detected"
     else
-        faint "  ⊘ context.md — already has content, skipped"
+        faint "  ⊘ Context.md — already has content, skipped"
     fi
 
-    # --- log.md: seed from git log ---
+    # --- Log.md: seed from git log ---
     if [ -d "$project_root/.git" ]; then
-        local log_file="$project_dir/log.md"
-        # Only seed if log.md just has the scaffold entry
+        local log_file="$project_dir/Log.md"
+        # Only seed if Log.md just has the scaffold entry
         if grep -q "^- Project scaffolded$" "$log_file" 2>/dev/null; then
             local log_content=""
             log_content+="# Log\n\n"
@@ -300,15 +300,15 @@ cmd_init() {
 
             if [ -n "$current_date" ]; then
                 printf '%b' "$log_content" > "$log_file"
-                faint "  ✓ log.md — seeded from git history"
+                faint "  ✓ Log.md — seeded from git history"
             fi
         else
-            faint "  ⊘ log.md — already has entries, skipped"
+            faint "  ⊘ Log.md — already has entries, skipped"
         fi
     fi
 
-    # --- plan.md: scan for TODO/FIXME comments ---
-    local plan_file="$project_dir/plan.md"
+    # --- Plan.md: scan for TODO/FIXME comments ---
+    local plan_file="$project_dir/Plan.md"
     if grep -q "Review project and add initial notes" "$plan_file" 2>/dev/null; then
         local todos=""
         local count=0
@@ -344,12 +344,12 @@ cmd_init() {
                 fi
             done < "$plan_file"
             mv "$tmp" "$plan_file"
-            faint "  ✓ plan.md — found $count TODO/FIXME comments"
+            faint "  ✓ Plan.md — found $count TODO/FIXME comments"
         else
-            faint "  ⊘ plan.md — no TODOs found in source"
+            faint "  ⊘ Plan.md — no TODOs found in source"
         fi
     else
-        faint "  ⊘ plan.md — already has content, skipped"
+        faint "  ⊘ Plan.md — already has content, skipped"
     fi
 
     # --- Copy project skills to vault ---
@@ -399,15 +399,15 @@ cmd_init() {
     fi
 
     if [ -z "$ai_bin" ]; then
-        faint "  Tip: install Claude Code or Codex to auto-generate richer context.md"
+        faint "  Tip: install Claude Code or Codex to auto-generate richer Context.md"
         return
     fi
 
     echo ""
     if command -v gum &>/dev/null; then
-        gum confirm "Let $ai_label analyse the project for a richer context.md?" || return
+        gum confirm "Let $ai_label analyse the project for a richer Context.md?" || return
     else
-        read -p "Let $ai_label analyse the project for a richer context.md? [y/N] " -n 1 -r
+        read -p "Let $ai_label analyse the project for a richer Context.md? [y/N] " -n 1 -r
         echo ""
         [[ ! $REPLY =~ ^[Yy]$ ]] && return
     fi
@@ -419,9 +419,9 @@ cmd_init() {
 
     local analysis_prompt="You are initialising a Knap project vault for \"$project_name\".
 The project source is at: $project_root
-The vault file is at: $project_dir/context.md
+The vault file is at: $project_dir/Context.md
 
-Read the codebase and rewrite context.md. Be concise and useful -- this file is read by AI sessions to understand the project quickly.
+Read the codebase and rewrite Context.md. Be concise and useful -- this file is read by AI sessions to understand the project quickly.
 
 Use this structure (keep the exact headers):
 
@@ -485,7 +485,7 @@ Keep it under 80 lines total. No fluff. Write the file now."
         rm -f "$tmp_output"
         echo ""
         success "✓ $ai_label analysis complete"
-        faint "  Review: $project_dir/context.md"
+        faint "  Review: $project_dir/Context.md"
     else
         rm -f "$tmp_output"
         echo ""
@@ -705,8 +705,10 @@ tidy_project() {
     local changes=0
 
     # Rename uppercase to lowercase
-    for old_name in "CONTEXT.md" "PLAN.md" "LOG.md" "STATUS.md"; do
-        local new_name=$(echo "$old_name" | tr '[:upper:]' '[:lower:]')
+    # Rename UPPERCASE and lowercase to Title Case
+    for rename_pair in "CONTEXT.md:Context.md" "context.md:Context.md" "PLAN.md:Plan.md" "plan.md:Plan.md" "LOG.md:Log.md" "log.md:Log.md" "STATUS.md:status.md" "status.md:status.md"; do
+        local old_name="${rename_pair%%:*}"
+        local new_name="${rename_pair##*:}"
         if [ -f "$dir/$old_name" ] && [ "$old_name" != "$new_name" ]; then
             mv "$dir/$old_name" "$dir/$new_name"
             faint "  ✓ $name: $old_name → $new_name"
@@ -714,30 +716,30 @@ tidy_project() {
         fi
     done
 
-    # Absorb STATUS.md / status.md into context.md if both exist
-    if [ -f "$dir/status.md" ] && [ -f "$dir/context.md" ]; then
-        # Append useful STATUS content to context.md
+    # Absorb STATUS.md / status.md into Context.md if both exist
+    if [ -f "$dir/status.md" ] && [ -f "$dir/Context.md" ]; then
+        # Append useful STATUS content to Context.md
         local status_content=$(cat "$dir/status.md")
         if echo "$status_content" | grep -q "^## Known Issues"; then
             local issues
             issues=$(sed -n '/^## Known Issues/,/^## /{ /^## /d; p; }' "$dir/status.md" 2>/dev/null | grep -v '^(')
             if [ -n "$issues" ]; then
-                echo "" >> "$dir/context.md"
-                echo "## Known Issues (from status.md)" >> "$dir/context.md"
-                echo "$issues" >> "$dir/context.md"
+                echo "" >> "$dir/Context.md"
+                echo "## Known Issues (from status.md)" >> "$dir/Context.md"
+                echo "$issues" >> "$dir/Context.md"
             fi
         fi
         mv "$dir/status.md" "$dir/status.old.md"
-        faint "  ✓ $name: status.md absorbed into context.md"
+        faint "  ✓ $name: status.md absorbed into Context.md"
         changes=$((changes + 1))
-    elif [ -f "$dir/status.md" ] && [ ! -f "$dir/context.md" ]; then
-        mv "$dir/status.md" "$dir/context.md"
-        faint "  ✓ $name: status.md → context.md"
+    elif [ -f "$dir/status.md" ] && [ ! -f "$dir/Context.md" ]; then
+        mv "$dir/status.md" "$dir/Context.md"
+        faint "  ✓ $name: status.md → Context.md"
         changes=$((changes + 1))
     fi
 
     # Rename old-format files (bash 3.2 compatible — no associative arrays)
-    local old_files="Notes.md:context.md Todos.md:plan.md Changelog.md:log.md"
+    local old_files="Notes.md:Context.md Todos.md:Plan.md Changelog.md:Log.md"
     for pair in $old_files; do
         local old_name="${pair%%:*}"
         local new_name="${pair##*:}"
@@ -752,7 +754,7 @@ tidy_project() {
         fi
     done
     # Handle space-in-name files separately
-    for pair in "Context Map.md:context.md" "Last Session.md:log.md"; do
+    for pair in "Context Map.md:Context.md" "Last Session.md:Log.md"; do
         local old_name="${pair%%:*}"
         local new_name="${pair##*:}"
         if [ -f "$dir/$old_name" ] && [ ! -f "$dir/$new_name" ]; then
@@ -770,8 +772,8 @@ tidy_project() {
     # Ensure all three files exist
     local today=$(date +%Y-%m-%d)
 
-    if [ ! -f "$dir/context.md" ]; then
-        cat > "$dir/context.md" << EOF
+    if [ ! -f "$dir/Context.md" ]; then
+        cat > "$dir/Context.md" << EOF
 # $name
 
 ## Overview
@@ -787,12 +789,12 @@ tidy_project() {
 
 ## Gotchas
 EOF
-        faint "  ✓ $name: created context.md"
+        faint "  ✓ $name: created Context.md"
         changes=$((changes + 1))
     fi
 
-    if [ ! -f "$dir/plan.md" ]; then
-        cat > "$dir/plan.md" << 'EOF'
+    if [ ! -f "$dir/Plan.md" ]; then
+        cat > "$dir/Plan.md" << 'EOF'
 # Plan
 
 ## Now
@@ -803,18 +805,18 @@ EOF
 
 ## Done
 EOF
-        faint "  ✓ $name: created plan.md"
+        faint "  ✓ $name: created Plan.md"
         changes=$((changes + 1))
     fi
 
-    if [ ! -f "$dir/log.md" ]; then
-        cat > "$dir/log.md" << EOF
+    if [ ! -f "$dir/Log.md" ]; then
+        cat > "$dir/Log.md" << EOF
 # Log
 
 ## $today
 - Project tidied
 EOF
-        faint "  ✓ $name: created log.md"
+        faint "  ✓ $name: created Log.md"
         changes=$((changes + 1))
     fi
 
@@ -855,15 +857,15 @@ migrate_project() {
     local name="$2"
     local today=$(date +%Y-%m-%d)
 
-    # Skip if already migrated (has context.md with Overview section)
-    if [ -f "$dir/context.md" ] && grep -q "^## Overview" "$dir/context.md" 2>/dev/null; then
+    # Skip if already migrated (has Context.md with Overview section)
+    if [ -f "$dir/Context.md" ] && grep -q "^## Overview" "$dir/Context.md" 2>/dev/null; then
         faint "  ⊘ $name — already migrated"
         return
     fi
 
     msg "  → Migrating $name"
 
-    # Build context.md from Notes.md, Context Map.md, STATUS.md
+    # Build Context.md from Notes.md, Context Map.md, STATUS.md
     local ctx=""
     ctx+="# $name\n\n"
 
@@ -902,32 +904,32 @@ migrate_project() {
         mv "$dir/Context Map.md" "$dir/Context Map.old.md"
     fi
 
-    # Merge existing context.md content if it has useful stuff
-    if [ -f "$dir/context.md" ]; then
+    # Merge existing Context.md content if it has useful stuff
+    if [ -f "$dir/Context.md" ]; then
         local existing
-        existing=$(cat "$dir/context.md")
+        existing=$(cat "$dir/Context.md")
         if ! echo "$existing" | grep -q "^(Framework, language"; then
             ctx+="\n---\n## Previous Context\n$existing\n"
         fi
-        mv "$dir/context.md" "$dir/context.old.md"
+        mv "$dir/Context.md" "$dir/context.old.md"
     fi
 
-    printf '%b' "$ctx" > "$dir/context.md"
+    printf '%b' "$ctx" > "$dir/Context.md"
 
-    # Remove STATUS.md (content absorbed into context.md)
+    # Remove STATUS.md (content absorbed into Context.md)
     [ -f "$dir/STATUS.md" ] && mv "$dir/STATUS.md" "$dir/STATUS.old.md"
 
-    # Todos.md → plan.md
+    # Todos.md → Plan.md
     if [ -f "$dir/Todos.md" ]; then
         local todos_content=$(cat "$dir/Todos.md")
         if grep -q '^## ' "$dir/Todos.md"; then
-            cat > "$dir/plan.md" << EOF
+            cat > "$dir/Plan.md" << EOF
 # Plan
 
 $todos_content
 EOF
         else
-            cat > "$dir/plan.md" << EOF
+            cat > "$dir/Plan.md" << EOF
 # Plan
 
 ## Now
@@ -943,7 +945,7 @@ EOF
         mv "$dir/Todos.md" "$dir/Todos.old.md"
     fi
 
-    # Changelog.md + Last Session.md → log.md
+    # Changelog.md + Last Session.md → Log.md
     local log_content=""
     if [ -f "$dir/Changelog.md" ]; then
         log_content=$(cat "$dir/Changelog.md")
@@ -958,7 +960,7 @@ $log_content"
         mv "$dir/Last Session.md" "$dir/Last Session.old.md"
     fi
     if [ -n "$log_content" ]; then
-        cat > "$dir/log.md" << EOF
+        cat > "$dir/Log.md" << EOF
 # Log
 
 $log_content
@@ -1185,9 +1187,9 @@ cmd_todo() {
 
     [ -z "$text" ] && return
 
-    local plan_file="$RESOLVED_PROJECT_DIR/plan.md"
+    local plan_file="$RESOLVED_PROJECT_DIR/Plan.md"
 
-    # Create plan.md if missing
+    # Create Plan.md if missing
     if [ ! -f "$plan_file" ]; then
         cat > "$plan_file" << 'EOF'
 # Plan
@@ -1224,13 +1226,13 @@ EOF
     if [ "$inserted" = true ]; then
         mv "$tmp" "$plan_file"
         success "✓ Added to $section: $text"
-        faint "  $RESOLVED_PROJECT_NAME/plan.md"
+        faint "  $RESOLVED_PROJECT_NAME/Plan.md"
     else
         rm -f "$tmp"
         # Section not found — append under Now
         echo "- [ ] $text" >> "$plan_file"
         success "✓ Added: $text"
-        faint "  $RESOLVED_PROJECT_NAME/plan.md (appended)"
+        faint "  $RESOLVED_PROJECT_NAME/Plan.md (appended)"
     fi
 }
 
@@ -1247,9 +1249,9 @@ cmd_done() {
 
     resolve_project "$explicit_project" || return
 
-    local plan_file="$RESOLVED_PROJECT_DIR/plan.md"
+    local plan_file="$RESOLVED_PROJECT_DIR/Plan.md"
     if [ ! -f "$plan_file" ]; then
-        warn "No plan.md found for $RESOLVED_PROJECT_NAME"
+        warn "No Plan.md found for $RESOLVED_PROJECT_NAME"
         return
     fi
 
@@ -1341,10 +1343,10 @@ cmd_log() {
 
     [ -z "$text" ] && return
 
-    local log_file="$RESOLVED_PROJECT_DIR/log.md"
+    local log_file="$RESOLVED_PROJECT_DIR/Log.md"
     local today=$(date +%Y-%m-%d)
 
-    # Create log.md if missing
+    # Create Log.md if missing
     if [ ! -f "$log_file" ]; then
         cat > "$log_file" << EOF
 # Log
@@ -1353,7 +1355,7 @@ cmd_log() {
 - $text
 EOF
         success "✓ Logged: $text"
-        faint "  $RESOLVED_PROJECT_NAME/log.md"
+        faint "  $RESOLVED_PROJECT_NAME/Log.md"
         return
     fi
 
@@ -1402,7 +1404,7 @@ EOF
     fi
 
     success "✓ Logged: $text"
-    faint "  $RESOLVED_PROJECT_NAME/log.md"
+    faint "  $RESOLVED_PROJECT_NAME/Log.md"
 }
 
 cmd_note() {
@@ -1433,10 +1435,10 @@ cmd_note() {
 
     [ -z "$text" ] && return
 
-    local context_file="$RESOLVED_PROJECT_DIR/context.md"
+    local context_file="$RESOLVED_PROJECT_DIR/Context.md"
 
     if [ ! -f "$context_file" ]; then
-        warn "No context.md found for $RESOLVED_PROJECT_NAME"
+        warn "No Context.md found for $RESOLVED_PROJECT_NAME"
         return
     fi
 
@@ -1459,7 +1461,7 @@ cmd_note() {
     fi
 
     success "✓ Noted in $section: $text"
-    faint "  $RESOLVED_PROJECT_NAME/context.md"
+    faint "  $RESOLVED_PROJECT_NAME/Context.md"
 }
 
 cmd_review() {
@@ -1474,8 +1476,8 @@ cmd_review() {
 
     resolve_project "$explicit_project" || return
 
-    local plan_file="$RESOLVED_PROJECT_DIR/plan.md"
-    local log_file="$RESOLVED_PROJECT_DIR/log.md"
+    local plan_file="$RESOLVED_PROJECT_DIR/Plan.md"
+    local log_file="$RESOLVED_PROJECT_DIR/Log.md"
     local today=$(date +%Y-%m-%d)
 
     msg "Reviewing $RESOLVED_PROJECT_NAME"
@@ -1607,7 +1609,7 @@ cmd_review() {
             done
         fi
 
-        # Write to log.md
+        # Write to Log.md
         if [ ! -f "$log_file" ]; then
             printf "# Log\n\n## %s\n%b" "$today" "$log_entry" > "$log_file"
         elif grep -q "^## $today" "$log_file"; then
@@ -1638,7 +1640,7 @@ cmd_review() {
             mv "$tmp" "$log_file"
         fi
 
-        success "  ✓ Logged to $RESOLVED_PROJECT_NAME/log.md"
+        success "  ✓ Logged to $RESOLVED_PROJECT_NAME/Log.md"
     fi
 
     echo ""
@@ -1660,7 +1662,7 @@ cmd_ship() {
     msg "Ship check for $RESOLVED_PROJECT_NAME"
     echo ""
 
-    local plan_file="$RESOLVED_PROJECT_DIR/plan.md"
+    local plan_file="$RESOLVED_PROJECT_DIR/Plan.md"
 
     # Show remaining open todos as a sanity check
     if [ -f "$plan_file" ]; then
@@ -1737,10 +1739,10 @@ cmd_help() {
     echo "    knap projects         List all projects"
     echo ""
     echo "  Day-to-Day:"
-    echo "    knap todo \"text\"      Add a TODO to plan.md (--next, --later for other sections)"
+    echo "    knap todo \"text\"      Add a TODO to Plan.md (--next, --later for other sections)"
     echo "    knap done             Interactively mark TODOs as complete"
     echo "    knap log \"text\"       Add a changelog entry under today's date"
-    echo "    knap note \"text\"      Add a note to STATUS.md"
+    echo "    knap note \"text\"      Add a note to Context.md (--gotcha for gotchas)"
     echo ""
     echo "  Session Flow:"
     echo "    knap review           End-of-session review (mark done, add todos, write log)"
